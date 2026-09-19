@@ -2,6 +2,7 @@ import math
 from collections import defaultdict
 
 from jevcraft.models import Action, ChoiceQuestion, DecisionRequest, ProviderResult
+from jevcraft.strategy.prompt import JEV_KOREAN_POLICY
 
 
 class ChoiceTree:
@@ -30,6 +31,8 @@ class ChoiceTree:
                 self.priorities[domain][group] = max(a.priority for a in candidates)
                 self.nodes[node] = {a.id: f"leaf:{a.id}" for a in candidates}
                 self.priorities[node] = {a.id: a.priority for a in candidates}
+        request_state = dict(state)
+        request_state["jev_policy_ko"] = JEV_KOREAN_POLICY
         questions = {}
         for node, options in self.nodes.items():
             if len(options) <= 1:
@@ -40,15 +43,15 @@ class ChoiceTree:
                 criteria[option] = "; ".join(self.actions[a].label for a in leaves)
             questions[node] = ChoiceQuestion(
                 instructions=(
-                    f"For the current Terran vs Terran state, choose one option at stage {node}. "
-                    "Evaluate this stage assuming its parent has selected it. Sustain economy, "
-                    "avoid supply blocks, preserve units and defeat the opponent. "
-                    "Unseen enemy strength is unknown. Positions named start are only hypotheses."
+                    f"현재 상태에서 {node} 단계의 선택지 하나만 고르십시오. "
+                    "부모 단계에서 선택한 전략을 전제로 평가하고, 실행 가능한 후보만 선택하십시오. "
+                    "상세한 한국어 전략 규칙과 매치업별 빌드오더는 state의 jev_policy_ko를 따르십시오. "
+                    "보이지 않는 적의 정보와 start 위치는 가설로만 취급하십시오."
                 ),
                 criteria=criteria,
             )
         self.request = DecisionRequest(
-            state=state,
+            state=request_state,
             questions=questions,
             priorities={k: self.priorities[k] for k in questions},
         )
