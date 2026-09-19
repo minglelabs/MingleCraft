@@ -125,6 +125,10 @@ Summaries include outcome, game duration, API calls, average/maximum call latenc
 
 Pass `--input-price USD_PER_MILLION --output-price USD_PER_MILLION` to estimate remote cost from reported tokens. No provider prices are hard-coded; failed calls can incur unreported charges, so their total cost remains unknown. See [metric definitions and benchmark protocol](docs/evaluation.md).
 
+## Remote testing from a Mac
+
+Keep the game, BWAPI DLL and Python service on the home Windows machine. From the company Mac, join the same private Tailscale network and connect to the Windows desktop. This avoids exposing the JevCraft HTTP port and keeps the existing `127.0.0.1:8765` bridge unchanged. See [remote testing](docs/remote-testing.md).
+
 ## Layout
 
 ```text
