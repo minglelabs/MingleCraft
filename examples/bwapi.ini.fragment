@@ -1,0 +1,5 @@
+; Merge this setting into your existing bwapi-data/bwapi.ini.
+; Do not replace the entire BWAPI configuration with this fragment.
+[ai]
+ai = bwapi-data/AI/JevCraft.dll
+

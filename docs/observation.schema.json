@@ -1,0 +1,501 @@
+{
+  "$defs": {
+    "BuildSite": {
+      "additionalProperties": false,
+      "properties": {
+        "unit_type": {
+          "enum": [
+            "Terran_Supply_Depot",
+            "Terran_Barracks"
+          ],
+          "title": "Unit Type",
+          "type": "string"
+        },
+        "tile": {
+          "$ref": "#/$defs/Position"
+        }
+      },
+      "required": [
+        "unit_type",
+        "tile"
+      ],
+      "title": "BuildSite",
+      "type": "object"
+    },
+    "Counters": {
+      "additionalProperties": false,
+      "properties": {
+        "gathered_minerals": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Gathered Minerals",
+          "type": "integer"
+        },
+        "gathered_gas": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Gathered Gas",
+          "type": "integer"
+        },
+        "spent_minerals": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Spent Minerals",
+          "type": "integer"
+        },
+        "spent_gas": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Spent Gas",
+          "type": "integer"
+        },
+        "units_killed": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Units Killed",
+          "type": "integer"
+        },
+        "units_lost": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Units Lost",
+          "type": "integer"
+        },
+        "commands_attempted": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Commands Attempted",
+          "type": "integer"
+        },
+        "commands_accepted": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Commands Accepted",
+          "type": "integer"
+        },
+        "commands_effective": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Commands Effective",
+          "type": "integer"
+        }
+      },
+      "title": "Counters",
+      "type": "object"
+    },
+    "Enemy": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minimum": 0,
+          "title": "Id",
+          "type": "integer"
+        },
+        "type": {
+          "maxLength": 80,
+          "title": "Type",
+          "type": "string"
+        },
+        "position": {
+          "$ref": "#/$defs/Position"
+        },
+        "hit_points": {
+          "minimum": 0,
+          "title": "Hit Points",
+          "type": "integer"
+        },
+        "visible": {
+          "title": "Visible",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "position",
+        "hit_points",
+        "visible"
+      ],
+      "title": "Enemy",
+      "type": "object"
+    },
+    "Location": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9_-]{1,64}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "position": {
+          "$ref": "#/$defs/Position"
+        },
+        "kind": {
+          "enum": [
+            "home",
+            "start"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "explored": {
+          "default": false,
+          "title": "Explored",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "position",
+        "kind"
+      ],
+      "title": "Location",
+      "type": "object"
+    },
+    "Mineral": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minimum": 0,
+          "title": "Id",
+          "type": "integer"
+        },
+        "position": {
+          "$ref": "#/$defs/Position"
+        }
+      },
+      "required": [
+        "id",
+        "position"
+      ],
+      "title": "Mineral",
+      "type": "object"
+    },
+    "Position": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "maximum": 8192,
+          "minimum": 0,
+          "title": "X",
+          "type": "integer"
+        },
+        "y": {
+          "maximum": 8192,
+          "minimum": 0,
+          "title": "Y",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "Position",
+      "type": "object"
+    },
+    "Receipt": {
+      "additionalProperties": false,
+      "properties": {
+        "decision_id": {
+          "title": "Decision Id",
+          "type": "string"
+        },
+        "frame": {
+          "minimum": 0,
+          "title": "Frame",
+          "type": "integer"
+        },
+        "attempted": {
+          "minimum": 0,
+          "title": "Attempted",
+          "type": "integer"
+        },
+        "accepted": {
+          "minimum": 0,
+          "title": "Accepted",
+          "type": "integer"
+        },
+        "effective": {
+          "minimum": 0,
+          "title": "Effective",
+          "type": "integer"
+        },
+        "reason": {
+          "maxLength": 256,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "decision_id",
+        "frame",
+        "attempted",
+        "accepted",
+        "effective",
+        "reason"
+      ],
+      "title": "Receipt",
+      "type": "object"
+    },
+    "Unit": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minimum": 0,
+          "title": "Id",
+          "type": "integer"
+        },
+        "type": {
+          "maxLength": 80,
+          "title": "Type",
+          "type": "string"
+        },
+        "position": {
+          "$ref": "#/$defs/Position"
+        },
+        "hit_points": {
+          "minimum": 0,
+          "title": "Hit Points",
+          "type": "integer"
+        },
+        "completed": {
+          "default": true,
+          "title": "Completed",
+          "type": "boolean"
+        },
+        "idle": {
+          "default": false,
+          "title": "Idle",
+          "type": "boolean"
+        },
+        "training": {
+          "default": false,
+          "title": "Training",
+          "type": "boolean"
+        },
+        "constructing": {
+          "default": false,
+          "title": "Constructing",
+          "type": "boolean"
+        },
+        "can_move": {
+          "default": false,
+          "title": "Can Move",
+          "type": "boolean"
+        },
+        "can_attack": {
+          "default": false,
+          "title": "Can Attack",
+          "type": "boolean"
+        },
+        "can_train": {
+          "default": [],
+          "items": {
+            "enum": [
+              "Terran_SCV",
+              "Terran_Marine"
+            ],
+            "type": "string"
+          },
+          "title": "Can Train",
+          "type": "array"
+        },
+        "can_gather": {
+          "default": [],
+          "items": {
+            "type": "integer"
+          },
+          "title": "Can Gather",
+          "type": "array"
+        },
+        "build_sites": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/BuildSite"
+          },
+          "title": "Build Sites",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "position",
+        "hit_points"
+      ],
+      "title": "Unit",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "protocol_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Protocol Version",
+      "type": "integer"
+    },
+    "match_id": {
+      "pattern": "^[a-zA-Z0-9_-]{1,100}$",
+      "title": "Match Id",
+      "type": "string"
+    },
+    "frame": {
+      "minimum": 0,
+      "title": "Frame",
+      "type": "integer"
+    },
+    "map_name": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Map Name",
+      "type": "string"
+    },
+    "map_hash": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Map Hash",
+      "type": "string"
+    },
+    "self_race": {
+      "const": "Terran",
+      "default": "Terran",
+      "title": "Self Race",
+      "type": "string"
+    },
+    "enemy_race": {
+      "const": "Terran",
+      "default": "Terran",
+      "title": "Enemy Race",
+      "type": "string"
+    },
+    "complete_map_information": {
+      "const": false,
+      "default": false,
+      "title": "Complete Map Information",
+      "type": "boolean"
+    },
+    "minerals": {
+      "minimum": 0,
+      "title": "Minerals",
+      "type": "integer"
+    },
+    "gas": {
+      "minimum": 0,
+      "title": "Gas",
+      "type": "integer"
+    },
+    "supply_used": {
+      "maximum": 400,
+      "minimum": 0,
+      "title": "Supply Used",
+      "type": "integer"
+    },
+    "supply_total": {
+      "maximum": 400,
+      "minimum": 0,
+      "title": "Supply Total",
+      "type": "integer"
+    },
+    "home": {
+      "$ref": "#/$defs/Position"
+    },
+    "units": {
+      "items": {
+        "$ref": "#/$defs/Unit"
+      },
+      "maxItems": 1024,
+      "title": "Units",
+      "type": "array"
+    },
+    "enemies": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Enemy"
+      },
+      "maxItems": 1024,
+      "title": "Enemies",
+      "type": "array"
+    },
+    "mineral_patches": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Mineral"
+      },
+      "maxItems": 512,
+      "title": "Mineral Patches",
+      "type": "array"
+    },
+    "locations": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Location"
+      },
+      "maxItems": 16,
+      "title": "Locations",
+      "type": "array"
+    },
+    "destroyed_enemy_ids": {
+      "default": [],
+      "items": {
+        "type": "integer"
+      },
+      "title": "Destroyed Enemy Ids",
+      "type": "array"
+    },
+    "counters": {
+      "$ref": "#/$defs/Counters",
+      "default": {
+        "gathered_minerals": 0,
+        "gathered_gas": 0,
+        "spent_minerals": 0,
+        "spent_gas": 0,
+        "units_killed": 0,
+        "units_lost": 0,
+        "commands_attempted": 0,
+        "commands_accepted": 0,
+        "commands_effective": 0
+      }
+    },
+    "receipts": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Receipt"
+      },
+      "maxItems": 64,
+      "title": "Receipts",
+      "type": "array"
+    },
+    "ended": {
+      "default": false,
+      "title": "Ended",
+      "type": "boolean"
+    },
+    "result": {
+      "default": "unknown",
+      "enum": [
+        "win",
+        "loss",
+        "draw",
+        "unknown"
+      ],
+      "title": "Result",
+      "type": "string"
+    }
+  },
+  "required": [
+    "match_id",
+    "frame",
+    "map_name",
+    "map_hash",
+    "minerals",
+    "gas",
+    "supply_used",
+    "supply_total",
+    "home",
+    "units"
+  ],
+  "title": "Observation",
+  "type": "object"
+}

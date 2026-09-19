@@ -1,0 +1,156 @@
+{
+  "protocol_version": 1,
+  "match_id": "example_match",
+  "frame": 0,
+  "map_name": "synthetic-contract-fixture",
+  "map_hash": "synthetic-v1",
+  "self_race": "Terran",
+  "enemy_race": "Terran",
+  "complete_map_information": false,
+  "minerals": 50,
+  "gas": 0,
+  "supply_used": 4,
+  "supply_total": 10,
+  "home": {
+    "x": 320,
+    "y": 320
+  },
+  "units": [
+    {
+      "id": 1,
+      "type": "Terran_Command_Center",
+      "position": {
+        "x": 320,
+        "y": 320
+      },
+      "hit_points": 1500,
+      "completed": true,
+      "idle": true,
+      "training": false,
+      "constructing": false,
+      "can_move": false,
+      "can_attack": false,
+      "can_train": [
+        "Terran_SCV"
+      ],
+      "can_gather": [],
+      "build_sites": []
+    },
+    {
+      "id": 2,
+      "type": "Terran_SCV",
+      "position": {
+        "x": 336,
+        "y": 360
+      },
+      "hit_points": 60,
+      "completed": true,
+      "idle": true,
+      "training": false,
+      "constructing": false,
+      "can_move": true,
+      "can_attack": false,
+      "can_train": [],
+      "can_gather": [
+        100
+      ],
+      "build_sites": []
+    },
+    {
+      "id": 3,
+      "type": "Terran_SCV",
+      "position": {
+        "x": 344,
+        "y": 360
+      },
+      "hit_points": 60,
+      "completed": true,
+      "idle": true,
+      "training": false,
+      "constructing": false,
+      "can_move": true,
+      "can_attack": false,
+      "can_train": [],
+      "can_gather": [
+        100
+      ],
+      "build_sites": []
+    },
+    {
+      "id": 4,
+      "type": "Terran_SCV",
+      "position": {
+        "x": 352,
+        "y": 360
+      },
+      "hit_points": 60,
+      "completed": true,
+      "idle": true,
+      "training": false,
+      "constructing": false,
+      "can_move": true,
+      "can_attack": false,
+      "can_train": [],
+      "can_gather": [
+        100
+      ],
+      "build_sites": []
+    },
+    {
+      "id": 5,
+      "type": "Terran_SCV",
+      "position": {
+        "x": 360,
+        "y": 360
+      },
+      "hit_points": 60,
+      "completed": true,
+      "idle": true,
+      "training": false,
+      "constructing": false,
+      "can_move": true,
+      "can_attack": false,
+      "can_train": [],
+      "can_gather": [
+        100
+      ],
+      "build_sites": []
+    }
+  ],
+  "enemies": [],
+  "mineral_patches": [
+    {
+      "id": 100,
+      "position": {
+        "x": 420,
+        "y": 360
+      }
+    }
+  ],
+  "locations": [
+    {
+      "id": "start_1",
+      "position": {
+        "x": 2048,
+        "y": 2048
+      },
+      "kind": "start",
+      "explored": false
+    }
+  ],
+  "destroyed_enemy_ids": [],
+  "counters": {
+    "gathered_minerals": 0,
+    "gathered_gas": 0,
+    "spent_minerals": 0,
+    "spent_gas": 0,
+    "units_killed": 0,
+    "units_lost": 0,
+    "commands_attempted": 0,
+    "commands_accepted": 0,
+    "commands_effective": 0
+  },
+  "receipts": [],
+  "ended": false,
+  "result": "unknown"
+}

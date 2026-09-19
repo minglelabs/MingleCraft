@@ -1,0 +1,46 @@
+name: CI
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.10', '3.12']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked --extra dev
+      - run: uv run ruff check src tests
+      - run: uv run ruff format --check src tests
+      - run: uv run pytest -q
+      - run: uv run jevcraft demo --steps 240 --output runs/ci
+
+  bwapi:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and verify official BWAPI 4.4.0 SDK
+        shell: pwsh
+        run: |
+          $archive = "$env:RUNNER_TEMP/BWAPI.7z"
+          Invoke-WebRequest https://github.com/bwapi/bwapi/releases/download/v4.4.0/BWAPI.7z -OutFile $archive
+          $expected = 'e6d1abeff2a9b31886d9ade15c5c783a32f7e973f1f0e7137911f3d083fa72e2'
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLower() -ne $expected) {
+            throw 'BWAPI SDK checksum mismatch'
+          }
+          7z x $archive "-o$env:RUNNER_TEMP/bwapi" -y | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'BWAPI extraction failed' }
+      - name: Configure Windows 32-bit bridge
+        shell: pwsh
+        run: cmake -S bwapi -B build/bwapi -A Win32 "-DBWAPI_ROOT=$env:RUNNER_TEMP/bwapi/Release_Binary"
+      - name: Build Release DLL
+        run: cmake --build build/bwapi --config Release --parallel
+
