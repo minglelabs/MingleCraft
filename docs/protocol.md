@@ -1,6 +1,6 @@
 # Bridge protocol v1
 
-The Python service listens only on `127.0.0.1:8765`. The native worker sends JSON over HTTP. `GET /health` returns the protocol version and configured map. No API credentials are sent to or stored in the game module.
+The Python service listens only on `127.0.0.1:8765`. The native worker sends JSON over HTTP. `GET /health` returns the protocol version and configured map. No API credentials are sent to or stored in the game module. StarCraft and the BWAPI module run on Windows; the Python service can run in Windows Python or WSL2. With WSL2's default localhost forwarding enabled, the Windows BWAPI process can reach the WSL service through the same loopback endpoint. Windows 11 22H2+ mirrored networking is an alternative when NAT forwarding or a VPN causes problems.
 
 ## Observation
 
@@ -54,4 +54,3 @@ Shutting down the Python service cleanly while a match is active produces an inc
 Provider requests have a total asynchronous deadline and no in-call retries. Timeout, invalid options/probabilities, rate limits and other provider failures select wait and start a two-second wall-clock cooldown. Every such fallback is logged. Live HTTP errors return 400/409/413/415/500 and never issue a command.
 
 Changing the provider deadline does not change bridge transport timeouts. Keep it under one second for this initial bridge or update both configurations together. An 800 ms model cannot sustain four decisions per second with one request in flight.
-

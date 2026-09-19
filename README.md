@@ -97,7 +97,21 @@ The native BWAPI 4.4.0 module runs inside **32-bit StarCraft: Brood War 1.16.1 o
    ```
 
 4. Copy `build/bwapi/Release/JevCraft.dll` into `StarCraft/bwapi-data/AI/`. Point the `[ai]` `ai` setting in `bwapi-data/bwapi.ini` to `bwapi-data/AI/JevCraft.dll`.
-5. Start `jevcraft serve --provider rule` on the Windows machine. The bridge uses `http://127.0.0.1:8765`; start the service before the match. To host Python elsewhere, forward that loopback port with an SSH tunnel. The service is intentionally not exposed to the network.
+5. Start the Python JevCraft service before the match. StarCraft and the BWAPI DLL must run natively on Windows; the Python service may run either in Windows Python or inside WSL2. The bridge uses `http://127.0.0.1:8765` and the service intentionally stays loopback-only.
+
+   **Simplest first live test: Windows Python**
+
+   ```powershell
+   py -3.12 -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   python -m pip install -e ".[dev]"
+   $env:OPENROUTER_API_KEY = "your-key"
+   jevcraft serve --provider openrouter-jev --model "~typesafe/jev-latest" --map "(2)Destination.scx"
+   ```
+
+   **WSL2 is also supported.** In the default WSL2 NAT mode, Windows normally forwards a WSL service to Windows `localhost`; keep WSL's `localhostForwarding=true` and run the same command inside WSL. If Windows cannot reach `http://127.0.0.1:8765/health`, use Windows 11 22H2+ mirrored networking (`networkingMode=mirrored` in `%USERPROFILE%\.wslconfig`) or run the service natively on Windows. Do not expose port 8765 to the LAN.
+
+   To host the Python service on another machine, use a private tunnel and update the bridge endpoint in the native module before building; the v0.1 DLL intentionally has the loopback endpoint fixed.
 6. In Chaoslauncher, enable the BWAPI **Release** injector. Create a 1v1 Terran vs Terran match on `(2)Destination.scx`. Supply the map yourself; no Blizzard game/map files are distributed here. If your map has a different filename, pass the exact BWAPI filename with `--map`.
 7. Inspect `runs/bwapi_<id>/` after the game. Confirm real execution receipts and `mode: "live"` before trying `--provider jev`.
 
