@@ -15,4 +15,6 @@ runs/
 *.scx
 *.scm
 *.rep
+*.tar.xz
+third_party/
 
