@@ -147,15 +147,25 @@ class ChoiceAnswer(Model):
     confidence: float | None = Field(default=None, ge=0, le=1)
 
 
+class NoulQuestion(Model):
+    type: Literal["noul"] = "noul"
+    instructions: str
+
+
+class NoulAnswer(Model):
+    type: Literal["noul"] = "noul"
+    noul: float = Field(ge=0, le=1)
+
+
 class ProviderResult(Model):
     model: str
-    answers: dict[str, ChoiceAnswer]
+    answers: dict[str, ChoiceAnswer | NoulAnswer]
     usage: dict[str, int] = {}
 
 
 class DecisionRequest(Model):
     state: dict
-    questions: dict[str, ChoiceQuestion]
+    questions: dict[str, ChoiceQuestion | NoulQuestion]
     # Baselines only; deliberately excluded from remote model payloads.
     priorities: dict[str, dict[str, float]]
 

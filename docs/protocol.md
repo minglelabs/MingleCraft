@@ -16,6 +16,7 @@ The Python service listens only on `127.0.0.1:8765`. The native worker sends JSO
 - Last-seen enemy positions expire after 2,880 frames, remain explicitly dated, and are removed on an observed death. Memory resets per game. The initial generator targets visible enemies and public starts; remembered positions inform the provider but are not independently generated attack targets yet.
 - `complete_map_information: true`, non-Terran races, duplicate entity IDs and extra top-level fields are rejected.
 - `counters` are cumulative per match. `receipts` is the last 64 execution results, intentionally repeated until later snapshots. Consumers must deduplicate receipts by `decision_id`.
+- The model-facing history is cumulative per match and resets at match boundaries. It records timestamped observations with hidden enemies filtered, issued actions, deduplicated command receipts, prior value estimates and the final match event. Observation deltas carry forward unchanged fields; a replaced list replaces the prior list.
 
 The game module never enables complete-map information, user control or other cheating flags. It checks the non-cheating condition at match start and while playing. Terrain knowledge is public; hidden enemy unit properties are not.
 
@@ -51,6 +52,8 @@ All BWAPI calls occur on the game thread. Only serialized JSON enters the backgr
 
 Shutting down the Python service cleanly while a match is active produces an incomplete summary with unknown outcome. A crashed/disconnected game can leave a trace without a summary; do not count it as a loss. Restart the service for an abandoned active match.
 
-Provider requests have a total asynchronous deadline and no in-call retries. Timeout, invalid options/probabilities, rate limits and other provider failures select wait and start a two-second wall-clock cooldown. Every such fallback is logged. Live HTTP errors return 400/409/413/415/500 and never issue a command.
+For Jev, an eligible decision consists of two sequential provider requests: one Noul `win_probability` request and one Choice policy request. The policy request receives the fresh value estimate. A shared per-step deadline covers both requests; partial value success is retained in the trace if policy fails. The same Jev model performs both roles.
 
-Changing the provider deadline does not change bridge transport timeouts. Keep it under one second for this initial bridge or update both configurations together. An 800 ms model cannot sustain four decisions per second with one request in flight.
+Provider requests have no in-call retries. Timeout, invalid options/probabilities, rate limits, cumulative request-size guard failures and other provider failures select wait and start a two-second wall-clock cooldown. Every fallback is logged. A request-size guard must reject before sending an oversized cumulative history; live HTTP errors return 400/409/413/415/500 and never issue a command.
+
+Changing the shared provider deadline does not change bridge transport timeouts. Keep it under one second for this initial bridge or update both configurations together. Two sequential calls and full history make the six-frame, 2–4 decisions/second cadence a target only. Receipts report command acceptance/rejection, not completion; later observations are required to infer effects.

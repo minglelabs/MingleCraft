@@ -1,0 +1,46 @@
+"""User strategy and stage-specific Jev instructions."""
+
+from jevcraft.strategy.prompt import JEV_ENGLISH_POLICY
+
+SHARED_POLICY = JEV_ENGLISH_POLICY
+
+VALUE_INSTRUCTIONS = """Will our player ultimately win this StarCraft: Brood War match,
+conditional on the current observed state and continuing to select legal actions
+under `strategy_policy`? Return the Noul probability of yes, not a positional
+Score, action preference, or separate confidence. A draw counts as not winning.
+Read `observation`, `candidate_actions`, and the complete chronological
+`match_history`. History observations are top-level deltas: unchanged fields
+carry forward; a replaced list replaces its previous contents. Each event has
+frame and game_seconds. Visible sightings are facts only at their timestamp;
+unseen enemy information remains unknown. An issued decision is only intent;
+a command_receipt reports acceptance, not completion. Infer effects only from
+subsequent observed changes. Do not treat missing observations as negative evidence.
+Use the supplied strategy's strategic reference and factual uncertainty rules;
+its Choice-only response instructions apply exclusively to the policy stage.
+Consider economy, production, technology, army composition, terrain, current
+threats, scouting age, and feasible continuation. Do not invent missing facts.
+`latest_value` and history value_estimate events are previous model estimates,
+not independent evidence or ground truth. Reassess from observations rather
+than anchoring on those estimates; the current estimate does not exist yet.
+This is an uncalibrated forecast until validated against actual match outcomes.
+"""
+
+POLICY_INSTRUCTIONS = """Select the legal option that best advances our eventual
+chance of winning under `strategy_policy`, using `observation`, every supplied
+`candidate_actions` entry, and complete timestamped `match_history`.
+Read history observation deltas chronologically; unchanged fields carry forward
+and replaced lists replace their previous contents. Distinguish sightings from
+hypotheses, issued commands from receipts, and acceptance from observed effects.
+The current `latest_value` is this observation's value-stage forecast. Historical
+forecasts are estimates, not fresh scouting, independent evidence, or measured
+win rates. A low forecast does not justify an illegal action or a blind attack;
+a high forecast does not justify ignoring defense or idle production.
+Re-evaluate immediate threats, uncertainty, economy, supply, and the supplied
+conditional strategy. Compare only this question's criteria. For child questions,
+assume the parent chose the branch described in the stage instructions. Other
+questions in this same call are independent and their answers are unavailable.
+Choose only an existing option ID. Code maps it to the exact BWAPI command;
+never generate a command or invent a target. Keep valid orders with wait when
+no new action is justified. Return only the requested Choice answer, with a
+probability for every option and confidence based on evidence.
+"""

@@ -11,6 +11,8 @@ class MatchLogger:
         self.trace = (directory / "decisions.jsonl").open("w", encoding="utf-8")
         self.metadata = metadata
         self.calls = self.errors = self.fallbacks = self.steps = 0
+        self.value_calls = self.policy_calls = 0
+        self.value_forecasts: list[float] = []
         self.latencies: list[float] = []
         self.confidences: list[float] = []
         self.input_tokens = self.output_tokens = 0
@@ -20,15 +22,32 @@ class MatchLogger:
         self.trace.write(json.dumps(event, ensure_ascii=False, allow_nan=False) + "\n")
         self.trace.flush()
         self.steps += 1
-        if event.get("called"):
+        calls = event.get("calls")
+        if calls is None and event.get("called"):
+            result = event.get("provider_result") or {}
+            calls = [{"latency_ms": event.get("latency_ms", 0), "usage": result.get("usage", {})}]
+        for call in calls or []:
             self.calls += 1
-            self.latencies.append(event["latency_ms"])
+            if call.get("stage") == "value":
+                self.value_calls += 1
+            elif call.get("stage") == "policy":
+                self.policy_calls += 1
+            self.latencies.append(call.get("latency_ms", 0))
+            usage = call.get("usage", {})
+            self.input_tokens += usage.get("input_tokens", 0)
+            self.output_tokens += usage.get("output_tokens", 0)
         self.errors += int(bool(event.get("error")))
         self.fallbacks += int(bool(event.get("envelope", {}).get("fallback_reason")))
         result = event.get("provider_result") or {}
-        usage = result.get("usage", {})
-        self.input_tokens += usage.get("input_tokens", 0)
-        self.output_tokens += usage.get("output_tokens", 0)
+        if not calls:
+            usage = result.get("usage", {})
+            self.input_tokens += usage.get("input_tokens", 0)
+            self.output_tokens += usage.get("output_tokens", 0)
+        value_answer = ((event.get("value_result") or {}).get("answers") or {}).get(
+            "win_probability", {}
+        )
+        if value_answer.get("type") == "noul" and "noul" in value_answer:
+            self.value_forecasts.append(value_answer["noul"])
         for step in event.get("path", []):
             confidence = (step.get("answer") or {}).get("confidence")
             if confidence is not None:
@@ -55,6 +74,8 @@ class MatchLogger:
             "game_seconds": seconds,
             "decision_steps": self.steps,
             "provider_calls": self.calls,
+            "value_calls": self.value_calls,
+            "policy_calls": self.policy_calls,
             "provider_errors": self.errors,
             "fallbacks": self.fallbacks,
             "mean_latency_ms": sum(self.latencies) / len(self.latencies)
@@ -64,6 +85,12 @@ class MatchLogger:
             "mean_path_confidence": sum(self.confidences) / len(self.confidences)
             if self.confidences
             else None,
+            "mean_win_probability": (
+                sum(self.value_forecasts) / len(self.value_forecasts)
+                if self.value_forecasts
+                else None
+            ),
+            "last_win_probability": self.value_forecasts[-1] if self.value_forecasts else None,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "estimated_api_cost_usd": known_cost if not self.errors else None,

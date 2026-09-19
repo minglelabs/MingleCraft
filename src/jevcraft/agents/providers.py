@@ -46,7 +46,8 @@ class RuleBasedProvider:
 
 
 class JevProvider:
-    name, remote = "jev", True
+    name, remote, supports_value = "jev", True, True
+    endpoint = "https://api.typesafe.ai/v1/systemone"
 
     def __init__(self, api_key: str, model: str = "jev-latest", transport=None):
         if not api_key:
@@ -54,51 +55,12 @@ class JevProvider:
         self.api_key, self.model, self.transport = api_key, model, transport
 
     async def decide(self, request: DecisionRequest) -> ProviderResult:
+        # The bridge creates a fresh event loop per HTTP step, so do not retain
+        # an AsyncClient across steps. Both stage calls have explicit deadlines.
         async with httpx.AsyncClient(timeout=5, transport=self.transport) as client:
             response = await client.post(
-                "https://api.typesafe.ai/v1/systemone",
+                self.endpoint,
                 headers={"Authorization": f"Bearer {self.api_key}"},
-                json={
-                    "model": self.model,
-                    "state": request.state,
-                    "questions": {k: v.model_dump() for k, v in request.questions.items()},
-                },
-            )
-            response.raise_for_status()
-            data = response.json()
-        result = ProviderResult.model_validate(
-            {
-                "model": data["model"],
-                "answers": data["answers"],
-                "usage": data.get("usage", {}),
-            }
-        )
-        if any(a.confidence is None or a.probabilities is None for a in result.answers.values()):
-            raise ValueError("Jev Choice responses must include confidence and probabilities")
-        return result
-
-
-class OpenRouterJevProvider:
-    name, remote = "openrouter-jev", True
-
-    def __init__(
-        self,
-        api_key: str,
-        model: str = "~typesafe/jev-latest",
-        transport=None,
-    ):
-        if not api_key:
-            raise ValueError("Set OPENROUTER_API_KEY before using the OpenRouter Jev provider")
-        self.api_key, self.model, self.transport = api_key, model, transport
-
-    async def decide(self, request: DecisionRequest) -> ProviderResult:
-        async with httpx.AsyncClient(timeout=5, transport=self.transport) as client:
-            response = await client.post(
-                "https://openrouter.ai/api/alpha/decisions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
                 json={
                     "model": self.model,
                     "state": request.state,
@@ -114,9 +76,26 @@ class OpenRouterJevProvider:
                 "usage": data.get("usage", {}),
             }
         )
-        if any(a.confidence is None or a.probabilities is None for a in result.answers.values()):
-            raise ValueError("OpenRouter Jev responses must include confidence and probabilities")
+        if set(result.answers) != set(request.questions):
+            raise ValueError("Jev answer IDs do not match questions")
+        for key, answer in result.answers.items():
+            if answer.type != request.questions[key].type:
+                raise ValueError("Jev answer type does not match question")
+            if answer.type == "choice" and (
+                answer.confidence is None or answer.probabilities is None
+            ):
+                raise ValueError("Jev Choice responses must include confidence and probabilities")
         return result
+
+
+class OpenRouterJevProvider(JevProvider):
+    name = "openrouter-jev"
+    endpoint = "https://openrouter.ai/api/alpha/decisions"
+
+    def __init__(self, api_key: str, model: str = "~typesafe/jev-latest", transport=None):
+        if not api_key:
+            raise ValueError("Set OPENROUTER_API_KEY before using the OpenRouter Jev provider")
+        super().__init__(api_key, model, transport)
 
 
 class OpenAIProvider:

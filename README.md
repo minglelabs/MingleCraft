@@ -19,8 +19,8 @@ This is an initial v0.1 implementation. Python end-to-end tests use a determinis
 Implemented:
 
 - Terran SCV/Marine production, mineral gathering, Supply Depot/Barracks construction, worker scouting, squad attack-move, defense and retreat.
-- Resource/supply checks plus BWAPI capability checks; at most 50 candidates, with fewer when the state has fewer legal choices.
-- Category → squad/producer group → concrete action. Speculative branch questions are batched in one Jev call.
+- Resource/supply checks plus BWAPI capability checks. Baseline providers use the bounded candidate path; Jev receives every candidate represented by the supported finite TvT contract, which can exceed 50.
+- Category → squad/producer group → concrete action. Jev makes two sequential calls per eligible step: a Noul win-probability forecast followed by Choice policy selection. Both are roles of the same Jev model, not separate trained networks or measured win rates.
 - Game-frame scheduling: micro/economy 6 frames, production 24 frames, construction/scouting 72 frames.
 - A non-blocking Windows BWAPI module with one inference in flight, response expiry, command revalidation and duplicate-order suppression.
 - Fog-of-war filtering and timestamped last-seen memory, cleared between matches.
@@ -56,12 +56,12 @@ Each demo produces `runs/demo_<id>/manifest.json`, `decisions.jsonl` and `summar
 | --- | --- | --- |
 | `rule` | None | Deterministic heuristic choices |
 | `random` | None | Seeded uniform choices at each hierarchy node |
-| `openrouter-jev` | `OPENROUTER_API_KEY` | Jev typed Choice answers through OpenRouter |
-| `jev` | `TYPESAFE_API_KEY` | Direct TypeSafe Jev API; optional |
+| `openrouter-jev` | `OPENROUTER_API_KEY` | Two-stage Jev Noul + Choice through OpenRouter |
+| `jev` | `TYPESAFE_API_KEY` | Two-stage direct TypeSafe Jev API |
 | `openai` | `OPENAI_API_KEY`, `--model` | Strict JSON-schema choices; no invented probabilities |
 | `local` | `--model`, optional `--base-url` | OpenAI-compatible structured-output endpoint |
 
-The default provider is **rule**. Selecting a remote provider explicitly enables billable calls.
+The `demo` command defaults to **rule** so it runs without credentials. The live `serve` command defaults to **jev** and therefore requires `TYPESAFE_API_KEY`; selecting a remote provider explicitly enables billable calls. Use `--strategy-file PATH` to replace the bundled strategy and `--request-size-limit BYTES` to set the cumulative request guard.
 
 ```bash
 # Recommended when you do not have a direct TypeSafe account:
@@ -79,7 +79,7 @@ jevcraft serve --provider openai --model YOUR_MODEL --deadline-ms 800
 jevcraft serve --provider local --model YOUR_MODEL --base-url http://127.0.0.1:8000/v1
 ```
 
-The direct Jev adapter implements the [official TypeSafe HTTP contract](https://docs.typesafe.ai/api): `POST /v1/systemone`, structured `state`, `model`, and typed `questions`. The OpenRouter Jev adapter sends the same typed request to OpenRouter's Jev Decisions endpoint using `OPENROUTER_API_KEY` and the `~typesafe/jev-latest` model route. This repository does not require a direct TypeSafe signup when using OpenRouter. It currently uses Choice; Noul and Score are extension points rather than fabricated signals. See [Jev primitives](https://docs.typesafe.ai/primitives) and [OpenAI structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
+The direct Jev adapter implements the [official TypeSafe HTTP contract](https://docs.typesafe.ai/api): `POST /v1/systemone`, structured `state`, `model`, and typed `questions`. The OpenRouter Jev adapter sends the same typed request to OpenRouter's Jev Decisions endpoint using `OPENROUTER_API_KEY` and the `~typesafe/jev-latest` model route. Each eligible Jev step sends a Noul `win_probability` request, records its result, then sends the Choice policy request with that fresh value and the complete timestamped history. Noul is used for the yes/no win forecast; Choice probabilities select among legal actions. Neither is an empirical calibration claim. See [Jev primitives](https://docs.typesafe.ai/primitives) and [the stage contract](docs/jev-policy.md).
 
 All providers receive the same state and finite questions. Heuristic priorities are private to the rule baseline and pruner. Random is uniform **per hierarchy node**, not over all leaf actions. Direct Jev and OpenRouter Jev return model probabilities/confidence; rule, random, OpenAI and local providers do not invent calibrated confidence.
 
@@ -115,13 +115,13 @@ The native BWAPI 4.4.0 module runs inside **32-bit StarCraft: Brood War 1.16.1 o
 6. In Chaoslauncher, enable the BWAPI **Release** injector. Create a 1v1 Terran vs Terran match on `(2)Destination.scx`. Supply the map yourself; no Blizzard game/map files are distributed here. If your map has a different filename, pass the exact BWAPI filename with `--map`.
 7. Inspect `runs/bwapi_<id>/` after the game. Confirm real execution receipts and `mode: "live"` before trying `--provider jev`.
 
-The bridge sets 42 ms/frame, samples no faster than every 6 game frames, and permits only one request in flight. **2–4 decisions/second is a target**, not a guarantee: network inference, state construction and available choices affect actual throughput. Existing orders continue during inference. A 200 ms default deadline and a 24-frame expiry prevent late choices from silently acting on stale state. Provider errors cause a two-second cooldown and a logged `wait`, never an unreported baseline takeover.
+The bridge sets 42 ms/frame, samples no faster than every 6 game frames, and permits only one decision sequence in flight. **2–4 decisions/second is a target**, not a verified result: two sequential inferences, network time, state construction, candidate count, and growing history affect throughput. Existing orders continue during inference. A shared per-step deadline, request-size guard, and 24-frame expiry prevent late or oversized choices from silently acting on stale state. Provider errors produce a logged `wait`, never an unreported baseline takeover.
 
 ## Evaluation and reproducibility
 
-Every decision trace includes the observation, compressed state, candidate list, all questions/answers, selected path, timing, fallback reason and command envelope. Later observations carry native execution receipts. The manifest records provider/model, seed, map hash, scheduling, deadline, candidate limit and optional prices.
+Every decision trace includes the observation, compressed state, candidate list, both Jev stage requests/results when applicable, full timestamped history, selected path, timing, fallback reason and command envelope. Later observations carry native execution receipts. The manifest records provider/model, seed, map hash, scheduling, deadline, request-size limit, candidate policy and optional prices.
 
-Summaries include outcome, game duration, API calls, average/maximum call latency, mean reported confidence on the selected path, usage, estimated cost, command APM/effective APM, resource spending and unit exchange ratio. Unknown values are `null`, not zero. Supply uses human units, not BWAPI's doubled internal units.
+Summaries include outcome, game duration, total/value/policy call counts, average/maximum call latency, mean Choice confidence, mean/last Noul forecast, usage, estimated cost, command APM/effective APM, resource spending and unit exchange ratio. Noul forecasts are model outputs, not measured win rates. Unknown values are `null`, not zero. Supply uses human units, not BWAPI's doubled internal units.
 
 Pass `--input-price USD_PER_MILLION --output-price USD_PER_MILLION` to estimate remote cost from reported tokens. No provider prices are hard-coded; failed calls can incur unreported charges, so their total cost remains unknown. See [metric definitions and benchmark protocol](docs/evaluation.md).
 
@@ -138,7 +138,7 @@ src/jevcraft/
   state/                Compact state and last-seen memory
   actions/              Generator, pruner, choice hierarchy and executor envelope
   agents/               DecisionProvider and model/baseline adapters
-  strategy/             Multi-rate scheduler
+  strategy/             Shared strategy, stage prompts and multi-rate scheduler
   evaluation/           Trace logger and match metrics
   loop.py               Observation → decision → envelope
   cli.py                demo / serve / report / schema

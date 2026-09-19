@@ -8,7 +8,7 @@ For live comparisons, keep the same map **hash**, opponent build/configuration, 
 
 Use repeated paired games with balanced starting positions and several seeds. Report sample sizes, failures, confidence intervals and timeout rates alongside win rate. There is no automatic tournament runner in v0.1; `jevcraft report runs` lists completed summary files without pooling incomparable configurations.
 
-The pruner uses the same heuristics for every model. Its cap is 50, not a minimum of 20: early-game states can have only a few actions. The rule baseline selects priorities directly; random samples uniformly at each hierarchy node. Those are distinct policies, not interchangeable control groups.
+The pruner remains the bounded path for baseline providers. Its cap is 50, not a minimum of 20: early-game states can have only a few actions. Jev receives the complete supported legal candidate set and is not evaluated on a heuristically pruned subset. The rule baseline selects priorities directly; random samples uniformly at each hierarchy node. Those are distinct policies, not interchangeable control groups.
 
 ## Metric definitions
 
@@ -17,8 +17,10 @@ The pruner uses the same heuristics for every model. Its cap is 50, not a minimu
 | `result` | Final callback outcome; unknown for fixtures or interrupted runs. A missing summary is not a loss. |
 | `game_seconds` | BWAPI frame / 24, a simulation-time convention, not wall time. |
 | `provider_calls` | Attempted model/baseline invocations, including failed requests; singleton paths and cooldown skips make no call. |
+| `value_calls`, `policy_calls` | Attempted Noul value and Choice policy calls, respectively. For an eligible step the normal sequence is one of each; a policy failure after value success retains both attempts in the trace. They are roles of the same model, not separate trained agents. |
 | `mean_latency_ms`, `max_latency_ms` | Wall time spent awaiting each provider call and validating it, including timeouts. Does not include BWAPI capture, network bridge round-trip or command execution. |
 | `mean_path_confidence` | Arithmetic mean of provider-reported confidence for chosen multi-option nodes; no synthetic confidence for rule/OpenAI/local providers. Not a win probability. |
+| `mean_win_probability`, `last_win_probability` | Mean and most recent successful Noul output for the question “will our player ultimately win?”. These are model forecasts, not observed outcomes, measured win rates, or empirical calibration results. Per-step forecasts remain in the trace. |
 | `estimated_api_cost_usd` | Configured input/output prices times reported usage. Null when unknown or any provider error occurred. Local compute cost is not estimated. |
 | `known_usage_cost_usd` | Cost of recorded usage only; may exclude billed failed calls. |
 | `command_apm` | Unit-command attempts at the executor × 60 / game seconds. This is harness command APM, not human input APM. |
@@ -26,7 +28,7 @@ The pruner uses the same heuristics for every model. Its cap is 50, not a minimu
 | `resource_spend_fraction` | (spent minerals + spent gas) / (50 starting minerals + gathered minerals + gathered gas). Proxy for spending, not economic efficiency; minerals/gas weighted equally. |
 | `unit_exchange_ratio` | Own cumulative credited kills / own deaths, including buildings and workers; null with no deaths. Not a value-weighted combat ratio. |
 
-Frames, accepted command counts, resource totals and death/kill counters originate from the game bridge. Model selections are not treated as successful actions. Match summaries consume final cumulative counters, so repeated receipt windows cannot inflate APM.
+Frames, accepted command counts, resource totals and death/kill counters originate from the game bridge. Model selections and accepted receipts are not treated as completed game effects; later observations establish observed changes. Full history is timestamped and cumulative, so request size, latency and context use grow with the match. Sampled observations cannot establish what happened between samples. Match summaries consume final cumulative counters, so repeated receipt windows cannot inflate APM.
 
 ## Live acceptance checklist
 
@@ -40,5 +42,7 @@ Frames, accepted command counts, resource totals and death/kill counters origina
 - End a game and start another: logs, cumulative counters, memory and random seed state must reset.
 - Configure `OPENROUTER_API_KEY`, select `openrouter-jev` with `~typesafe/jev-latest`, and verify real response distributions, latency, timeout rate and usage in logs. Direct `TYPESAFE_API_KEY` access is optional. Keys must never appear in traces.
 - Run paired games before drawing conclusions about Jev versus another provider.
+- Treat the six-frame cadence and 2–4 decisions/second as an acceptance target requiring live measurement, not as an existing performance claim.
+- Check the cumulative history-size guard with long matches and confirm that an oversized request produces a logged wait without sending a partial or silently truncated history.
 
-These game-level checks require Windows and StarCraft and are **pending** until actually performed. Mock HTTP tests establish adapter shape, not live service compatibility or account access.
+These game-level checks require Windows and StarCraft and are **pending** until actually performed. Mock HTTP tests establish adapter shape, sequencing, history semantics and failure handling, not live service compatibility, account access, empirical calibration, or competitive performance.

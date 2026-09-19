@@ -2,7 +2,7 @@ import math
 from collections import defaultdict
 
 from jevcraft.models import Action, ChoiceQuestion, DecisionRequest, ProviderResult
-from jevcraft.strategy.prompt import JEV_ENGLISH_POLICY
+from jevcraft.strategy.policy import POLICY_INSTRUCTIONS
 
 
 class ChoiceTree:
@@ -32,7 +32,6 @@ class ChoiceTree:
                 self.nodes[node] = {a.id: f"leaf:{a.id}" for a in candidates}
                 self.priorities[node] = {a.id: a.priority for a in candidates}
         request_state = dict(state)
-        request_state["jev_policy_en"] = JEV_ENGLISH_POLICY
         questions = {}
         for node, options in self.nodes.items():
             if len(options) <= 1:
@@ -43,10 +42,8 @@ class ChoiceTree:
                 criteria[option] = "; ".join(self.actions[a].label for a in leaves)
             questions[node] = ChoiceQuestion(
                 instructions=(
-                    f"Choose exactly one option at stage {node} for the current state. "
-                    "Evaluate it assuming the parent stage has already selected its strategy, and choose only an executable candidate. "
-                    "Follow the detailed English strategy rules and matchup build orders in state.jev_policy_en. "
-                    "Treat unseen enemy information and start locations only as hypotheses."
+                    POLICY_INSTRUCTIONS + f"\nChoose exactly one option at stage {node}. "
+                    "Evaluate this stage assuming its parent has selected it."
                 ),
                 criteria=criteria,
             )
@@ -66,6 +63,8 @@ class ChoiceTree:
         if set(result.answers) != set(self.request.questions):
             raise ValueError("Provider answer IDs do not match the request")
         for node, answer in result.answers.items():
+            if answer.type != "choice":
+                raise ValueError("Expected a Choice answer")
             options = self.request.questions[node].criteria
             if answer.choice not in options:
                 raise ValueError("Provider chose an option outside the finite choice set")

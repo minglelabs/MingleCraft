@@ -16,6 +16,7 @@ from jevcraft.agents import (
 from jevcraft.bwapi.server import BridgeApplication, make_server
 from jevcraft.bwapi.synthetic import SyntheticGame
 from jevcraft.loop import AgentLoop
+from jevcraft.strategy.policy import SHARED_POLICY
 
 
 def provider_for(args):
@@ -44,7 +45,7 @@ def main():
         command.add_argument(
             "--provider",
             choices=["rule", "random", "jev", "openrouter-jev", "openai", "local"],
-            default="rule",
+            default="rule" if name == "demo" else "jev",
         )
         command.add_argument("--model")
         command.add_argument("--base-url", default="http://127.0.0.1:8000/v1")
@@ -53,6 +54,13 @@ def main():
         command.add_argument("--deadline-ms", type=int, default=200)
         command.add_argument("--ttl-frames", type=int, default=24)
         command.add_argument("--candidate-limit", type=int, default=50)
+        command.add_argument("--strategy-file", type=Path)
+        command.add_argument(
+            "--request-size-limit",
+            type=int,
+            default=1_500_000,
+            help="Maximum wire-payload bytes per provider request (positive integer)",
+        )
         command.add_argument("--input-price", type=float, help="USD per million input tokens")
         command.add_argument("--output-price", type=float, help="USD per million output tokens")
         if name == "demo":
@@ -78,6 +86,15 @@ def main():
     if (args.input_price is None) != (args.output_price is None):
         parser.error("Set both --input-price and --output-price, or neither")
     pricing = None if args.input_price is None else (args.input_price, args.output_price)
+    if args.strategy_file is None:
+        strategy = SHARED_POLICY
+    else:
+        try:
+            strategy = args.strategy_file.read_text(encoding="utf-8")
+        except (FileNotFoundError, IsADirectoryError, PermissionError, OSError) as exc:
+            parser.error(f"Cannot read strategy file: {exc}")
+    if args.request_size_limit <= 0:
+        parser.error("--request-size-limit must be a positive integer")
 
     def new_loop():
         return AgentLoop(
@@ -89,6 +106,8 @@ def main():
             seed=args.seed,
             mode="synthetic" if args.command == "demo" else "live",
             pricing=pricing,
+            strategy=strategy,
+            request_size_limit=args.request_size_limit,
         )
 
     try:
