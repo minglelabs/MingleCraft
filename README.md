@@ -56,14 +56,20 @@ Each demo produces `runs/demo_<id>/manifest.json`, `decisions.jsonl` and `summar
 | --- | --- | --- |
 | `rule` | None | Deterministic heuristic choices |
 | `random` | None | Seeded uniform choices at each hierarchy node |
-| `jev` | `TYPESAFE_API_KEY` | Typed Choice answers, probabilities and confidence |
+| `openrouter-jev` | `OPENROUTER_API_KEY` | Jev typed Choice answers through OpenRouter |
+| `jev` | `TYPESAFE_API_KEY` | Direct TypeSafe Jev API; optional |
 | `openai` | `OPENAI_API_KEY`, `--model` | Strict JSON-schema choices; no invented probabilities |
 | `local` | `--model`, optional `--base-url` | OpenAI-compatible structured-output endpoint |
 
 The default provider is **rule**. Selecting a remote provider explicitly enables billable calls.
 
 ```bash
-# Set TYPESAFE_API_KEY in your shell, then:
+# Recommended when you do not have a direct TypeSafe account:
+export OPENROUTER_API_KEY=your-key
+jevcraft serve --provider openrouter-jev --model '~typesafe/jev-latest' --deadline-ms 800
+
+# Direct TypeSafe access is optional and requires its own account/key:
+export TYPESAFE_API_KEY=your-key
 jevcraft serve --provider jev --model jev-latest --deadline-ms 200
 
 # Select a model that supports Chat Completions structured outputs:
@@ -73,9 +79,9 @@ jevcraft serve --provider openai --model YOUR_MODEL --deadline-ms 800
 jevcraft serve --provider local --model YOUR_MODEL --base-url http://127.0.0.1:8000/v1
 ```
 
-The Jev adapter implements the [official HTTP contract](https://docs.typesafe.ai/api): `POST /v1/systemone`, structured `state`, `model`, and typed `questions`. It currently uses Choice; Noul and Score are extension points rather than fabricated signals. See [Jev primitives](https://docs.typesafe.ai/primitives) and [OpenAI structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
+The direct Jev adapter implements the [official TypeSafe HTTP contract](https://docs.typesafe.ai/api): `POST /v1/systemone`, structured `state`, `model`, and typed `questions`. The OpenRouter Jev adapter sends the same typed request to OpenRouter's Jev Decisions endpoint using `OPENROUTER_API_KEY` and the `~typesafe/jev-latest` model route. This repository does not require a direct TypeSafe signup when using OpenRouter. It currently uses Choice; Noul and Score are extension points rather than fabricated signals. See [Jev primitives](https://docs.typesafe.ai/primitives) and [OpenAI structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
 
-All providers receive the same state and finite questions. Heuristic priorities are private to the rule baseline and pruner. Random is uniform **per hierarchy node**, not over all leaf actions. Neither rule nor OpenAI choices imply calibrated confidence.
+All providers receive the same state and finite questions. Heuristic priorities are private to the rule baseline and pruner. Random is uniform **per hierarchy node**, not over all leaf actions. Direct Jev and OpenRouter Jev return model probabilities/confidence; rule, random, OpenAI and local providers do not invent calibrated confidence.
 
 ## Connect real StarCraft
 
@@ -128,4 +134,3 @@ Implement `DecisionProvider.decide(DecisionRequest) -> ProviderResult` to add an
 ## License
 
 JevCraft code is MIT licensed. BWAPI is a separate LGPL dependency; nlohmann/json is MIT licensed. See [third-party notices](THIRD_PARTY_NOTICES.md). StarCraft and Brood War are Blizzard trademarks. This project is not affiliated with Blizzard or TypeSafe.
-

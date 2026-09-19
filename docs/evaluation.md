@@ -38,8 +38,7 @@ Frames, accepted command counts, resource totals and death/kill counters origina
 - Pause/delay the Python service while a decision is pending: the game must keep running, old orders must continue, and expired responses must not execute.
 - Kill a selected unit or spend its required resources during inference; native revalidation must reject the now-illegal command.
 - End a game and start another: logs, cumulative counters, memory and random seed state must reset.
-- Configure `TYPESAFE_API_KEY`, select Jev and verify real response distributions, latency, timeout rate and usage in logs. Keys must never appear in traces.
+- Configure `OPENROUTER_API_KEY`, select `openrouter-jev` with `~typesafe/jev-latest`, and verify real response distributions, latency, timeout rate and usage in logs. Direct `TYPESAFE_API_KEY` access is optional. Keys must never appear in traces.
 - Run paired games before drawing conclusions about Jev versus another provider.
 
 These game-level checks require Windows and StarCraft and are **pending** until actually performed. Mock HTTP tests establish adapter shape, not live service compatibility or account access.
-

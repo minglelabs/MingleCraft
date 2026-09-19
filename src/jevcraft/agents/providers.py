@@ -78,6 +78,47 @@ class JevProvider:
         return result
 
 
+class OpenRouterJevProvider:
+    name, remote = "openrouter-jev", True
+
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "~typesafe/jev-latest",
+        transport=None,
+    ):
+        if not api_key:
+            raise ValueError("Set OPENROUTER_API_KEY before using the OpenRouter Jev provider")
+        self.api_key, self.model, self.transport = api_key, model, transport
+
+    async def decide(self, request: DecisionRequest) -> ProviderResult:
+        async with httpx.AsyncClient(timeout=5, transport=self.transport) as client:
+            response = await client.post(
+                "https://openrouter.ai/api/alpha/decisions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self.model,
+                    "state": request.state,
+                    "questions": {k: v.model_dump() for k, v in request.questions.items()},
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+        result = ProviderResult.model_validate(
+            {
+                "model": data.get("model", self.model),
+                "answers": data["answers"],
+                "usage": data.get("usage", {}),
+            }
+        )
+        if any(a.confidence is None or a.probabilities is None for a in result.answers.values()):
+            raise ValueError("OpenRouter Jev responses must include confidence and probabilities")
+        return result
+
+
 class OpenAIProvider:
     name, remote = "openai", True
 

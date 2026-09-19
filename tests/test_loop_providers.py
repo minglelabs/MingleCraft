@@ -6,7 +6,12 @@ import pytest
 
 from jevcraft.actions.generator import ActionGenerator
 from jevcraft.actions.hierarchy import ChoiceTree
-from jevcraft.agents import JevProvider, OpenAIProvider, RuleBasedProvider
+from jevcraft.agents import (
+    JevProvider,
+    OpenAIProvider,
+    OpenRouterJevProvider,
+    RuleBasedProvider,
+)
 from jevcraft.bwapi.synthetic import SyntheticGame
 from jevcraft.loop import AgentLoop
 from jevcraft.strategy.scheduler import Scheduler
@@ -147,6 +152,42 @@ def test_openai_schema_and_no_invented_confidence(observation):
         )
     )
     assert all(a.confidence is None and a.probabilities is None for a in result.answers.values())
+
+
+def test_openrouter_jev_uses_decisions_endpoint(observation):
+    request = ChoiceTree(
+        {}, ActionGenerator().generate(observation, set(Scheduler.periods))
+    ).request
+
+    def respond(http_request):
+        assert str(http_request.url) == "https://openrouter.ai/api/alpha/decisions"
+        assert http_request.headers["authorization"] == "Bearer router-key"
+        payload = json.loads(http_request.content)
+        assert payload["model"] == "~typesafe/jev-latest"
+        answers = {}
+        for node, question in payload["questions"].items():
+            options = list(question["criteria"])
+            answers[node] = {
+                "type": "choice",
+                "choice": options[0],
+                "confidence": 0.91,
+                "probabilities": {key: float(key == options[0]) for key in options},
+            }
+        return httpx.Response(
+            200,
+            json={
+                "model": "~typesafe/jev-latest",
+                "answers": answers,
+                "usage": {"input_tokens": 120, "output_tokens": 14},
+            },
+        )
+
+    result = asyncio.run(
+        OpenRouterJevProvider("router-key", transport=httpx.MockTransport(respond)).decide(request)
+    )
+    assert result.model == "~typesafe/jev-latest"
+    assert result.usage["output_tokens"] == 14
+    assert all(answer.confidence == 0.91 for answer in result.answers.values())
 
 
 def test_cost_unknown_without_configured_prices(observation, tmp_path):

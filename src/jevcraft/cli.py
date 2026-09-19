@@ -9,6 +9,7 @@ from jevcraft.agents import (
     JevProvider,
     LocalModelProvider,
     OpenAIProvider,
+    OpenRouterJevProvider,
     RandomProvider,
     RuleBasedProvider,
 )
@@ -24,6 +25,10 @@ def provider_for(args):
         return RandomProvider(args.seed)
     if args.provider == "jev":
         return JevProvider(os.environ.get("TYPESAFE_API_KEY", ""), args.model or "jev-latest")
+    if args.provider == "openrouter-jev":
+        return OpenRouterJevProvider(
+            os.environ.get("OPENROUTER_API_KEY", ""), args.model or "~typesafe/jev-latest"
+        )
     if not args.model:
         raise ValueError("--model is required for OpenAI and local providers")
     if args.provider == "openai":
@@ -37,7 +42,9 @@ def main():
     for name in ("demo", "serve"):
         command = sub.add_parser(name)
         command.add_argument(
-            "--provider", choices=["rule", "random", "jev", "openai", "local"], default="rule"
+            "--provider",
+            choices=["rule", "random", "jev", "openrouter-jev", "openai", "local"],
+            default="rule",
         )
         command.add_argument("--model")
         command.add_argument("--base-url", default="http://127.0.0.1:8000/v1")
