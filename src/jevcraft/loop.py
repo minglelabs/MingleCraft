@@ -3,6 +3,8 @@ import json
 import time
 from pathlib import Path
 
+import httpx
+
 from jevcraft import __version__
 from jevcraft.actions.executor import envelope
 from jevcraft.actions.generator import ActionGenerator
@@ -146,6 +148,7 @@ class AgentLoop:
         )
         tree = ChoiceTree(state, actions)
         selected, path, reason, error = actions[0], [], None, None
+        provider_http_status = None
         value_result = policy_result = None
         value_request = policy_request = None
         calls = []
@@ -211,6 +214,10 @@ class AgentLoop:
                     }
                 )
             error = type(exc).__name__
+            if isinstance(exc, httpx.HTTPStatusError):
+                provider_http_status = exc.response.status_code
+                # Do not log headers, credentials, or provider response bodies.
+                print(f"JevCraft provider HTTP error: {provider_http_status}", flush=True)
             reason = (
                 "deadline"
                 if isinstance(exc, (TimeoutError, asyncio.TimeoutError))
@@ -237,6 +244,7 @@ class AgentLoop:
                 if policy_request is not None
                 else None,
                 "error": error,
+                "provider_http_status": provider_http_status,
                 "provider_result": policy_result.model_dump()
                 if policy_result is not None
                 else None,
