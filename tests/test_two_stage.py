@@ -58,7 +58,8 @@ def test_jev_value_then_policy_has_fresh_value_and_history(observation, tmp_path
         if record["event"] == "observation" and "enemies" in record["observation_delta"]
         for enemy in record["observation_delta"]["enemies"]
     )
-    assert "strategy_policy" in policy.state
+    assert "strategy_policy" not in policy.state
+    assert "strategy_policy" not in value.state
 
 
 def test_policy_failure_keeps_value_usage_and_sanitizes_error(observation, tmp_path):

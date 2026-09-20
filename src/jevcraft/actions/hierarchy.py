@@ -8,7 +8,12 @@ from jevcraft.strategy.policy import POLICY_INSTRUCTIONS
 class ChoiceTree:
     """Domain -> squad/producer group -> concrete action, batched in one call."""
 
-    def __init__(self, state: dict, actions: list[Action]):
+    def __init__(
+        self,
+        state: dict,
+        actions: list[Action],
+        instructions: str = POLICY_INSTRUCTIONS,
+    ):
         self.actions = {a.id: a for a in actions}
         self.nodes: dict[str, dict[str, str]] = {}
         self.priorities: dict[str, dict[str, float]] = {}
@@ -42,7 +47,7 @@ class ChoiceTree:
                 criteria[option] = "; ".join(self.actions[a].label for a in leaves)
             questions[node] = ChoiceQuestion(
                 instructions=(
-                    POLICY_INSTRUCTIONS + f"\nChoose exactly one option at stage {node}. "
+                    instructions + f"\nChoose exactly one option at stage {node}. "
                     "Evaluate this stage assuming its parent has selected it."
                 ),
                 criteria=criteria,

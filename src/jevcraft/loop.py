@@ -15,8 +15,11 @@ from jevcraft.evaluation.logger import MatchLogger
 from jevcraft.models import DecisionRequest, NoulQuestion, Observation, ProviderResult
 from jevcraft.state import StateBuilder
 from jevcraft.state.history import MatchHistory
-from jevcraft.strategy.policy import SHARED_POLICY, VALUE_INSTRUCTIONS
+from jevcraft.strategy.policy import POLICY_INSTRUCTIONS, SHARED_POLICY
 from jevcraft.strategy.scheduler import Scheduler
+
+LIVE_VALUE_INSTRUCTIONS = "Estimate the chance of ultimately winning from the supplied game state. Return only the requested Noul probability."
+LIVE_POLICY_INSTRUCTIONS = "Choose only the existing option that best improves the chance of winning from the supplied game state. Return only the requested Choice answer."
 
 
 class AgentLoop:
@@ -91,7 +94,6 @@ class AgentLoop:
             "candidate_actions": [a.model_dump(exclude={"priority"}) for a in actions],
             "match_history": history_window,
             "match_history_truncated": len(history_window) < len(history),
-            "strategy_policy": self.strategy,
             "latest_value": latest_value,
         }
 
@@ -140,7 +142,6 @@ class AgentLoop:
         self.history.observe(obs)
         state = {
             **self.state_builder.build(obs),
-            "strategy_policy": self.strategy,
             "observation": {
                 **obs.model_dump(),
                 "enemies": [e for e in obs.model_dump()["enemies"] if e["visible"]],
@@ -153,7 +154,11 @@ class AgentLoop:
             if staged
             else prune(self.generator.generate(obs, due), self.limit)
         )
-        tree = ChoiceTree(state, actions)
+        tree = ChoiceTree(
+            state,
+            actions,
+            instructions=LIVE_POLICY_INSTRUCTIONS if staged else POLICY_INSTRUCTIONS,
+        )
         selected, path, reason, error = actions[0], [], None, None
         provider_http_status = None
         value_result = policy_result = None
@@ -169,7 +174,8 @@ class AgentLoop:
                     state, actions, self.history.snapshot(), self.latest_value
                 )
                 value_request = self._request(
-                    value_state, {"win_probability": NoulQuestion(instructions=VALUE_INSTRUCTIONS)}
+                    value_state,
+                    {"win_probability": NoulQuestion(instructions=LIVE_VALUE_INSTRUCTIONS)},
                 )
                 if deadline - time.monotonic() <= 0:
                     raise asyncio.TimeoutError()
