@@ -23,11 +23,6 @@ LIVE_POLICY_INSTRUCTIONS = "Choose only the existing option that best improves t
 
 
 class AgentLoop:
-    # Keep the full history in local evaluation logs, but send a bounded
-    # chronological window to Jev so the request stays within its context
-    # budget during long live games.
-    model_history_limit = 32
-
     def __init__(
         self,
         provider: DecisionProvider,
@@ -87,13 +82,13 @@ class AgentLoop:
         return request
 
     def _context(self, state: dict, actions: list, history: list[dict], latest_value=None) -> dict:
-        history_window = history[-self.model_history_limit :]
+        # Match history remains in local traces. The current observation,
+        # StateBuilder's enemy memory, and the complete candidate list are
+        # sent to Jev; repeating the lossless event log exhausts its context.
         return {
             **state,
             "observation": state.get("observation", state),
             "candidate_actions": [a.model_dump(exclude={"priority"}) for a in actions],
-            "match_history": history_window,
-            "match_history_truncated": len(history_window) < len(history),
             "latest_value": latest_value,
         }
 
