@@ -101,7 +101,7 @@ class Bridge final : public AIModule {
                     {"attempted", 0}, {"accepted", 0}, {"effective", 0}, {"reason", "ok"}};
     if (response.at("protocol_version") != 1 || response.at("match_id") != match ||
         observed != lastSent || observed <= lastAppliedObservation || observed > frame ||
-        expires < frame || expires < observed || expires - observed > 240) {
+        expires < frame || expires < observed || expires - observed > 480) {
       receipt["reason"] = "stale_or_wrong_match";
     } else {
       lastAppliedObservation = observed;
@@ -227,4 +227,3 @@ public:
 extern "C" __declspec(dllexport) void gameInit(BWAPI::Game* game) { BWAPI::BroodwarPtr = game; }
 extern "C" __declspec(dllexport) BWAPI::AIModule* newAIModule() { return new Bridge(); }
 BOOL APIENTRY DllMain(HMODULE, DWORD, LPVOID) { return TRUE; }
-
