@@ -20,6 +20,11 @@ from jevcraft.strategy.scheduler import Scheduler
 
 
 class AgentLoop:
+    # Keep the full history in local evaluation logs, but send a bounded
+    # chronological window to Jev so the request stays within its context
+    # budget during long live games.
+    model_history_limit = 32
+
     def __init__(
         self,
         provider: DecisionProvider,
@@ -79,11 +84,13 @@ class AgentLoop:
         return request
 
     def _context(self, state: dict, actions: list, history: list[dict], latest_value=None) -> dict:
+        history_window = history[-self.model_history_limit :]
         return {
             **state,
             "observation": state.get("observation", state),
             "candidate_actions": [a.model_dump(exclude={"priority"}) for a in actions],
-            "match_history": history,
+            "match_history": history_window,
+            "match_history_truncated": len(history_window) < len(history),
             "strategy_policy": self.strategy,
             "latest_value": latest_value,
         }
