@@ -67,6 +67,12 @@ class JevProvider:
                     "questions": {k: v.model_dump() for k, v in request.questions.items()},
                 },
             )
+            if response.is_error:
+                detail = response.text[:800].replace(self.api_key, "[REDACTED]")
+                print(
+                    f"JevCraft provider response {response.status_code}: {detail}",
+                    flush=True,
+                )
             response.raise_for_status()
             data = response.json()
         result = ProviderResult.model_validate(
