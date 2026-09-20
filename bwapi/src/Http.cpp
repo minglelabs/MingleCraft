@@ -21,7 +21,7 @@ nlohmann::json postLocal(const wchar_t* path, const nlohmann::json& payload) {
   // the staged value and policy requests are both in flight. Keep the game
   // thread asynchronous, but allow the worker enough time to receive a
   // valid response instead of turning normal provider latency into a retry.
-  require(WinHttpSetTimeouts(session.get(), 1000, 1000, 5000, 5000) != FALSE);
+  require(WinHttpSetTimeouts(session.get(), 1000, 1000, 15000, 15000) != FALSE);
   Handle connection(WinHttpConnect(session.get(), L"127.0.0.1", 8765, 0));
   require(bool(connection));
   Handle request(WinHttpOpenRequest(connection.get(), L"POST", path, nullptr,
