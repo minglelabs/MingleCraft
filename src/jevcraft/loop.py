@@ -10,6 +10,7 @@ from jevcraft.actions.executor import envelope
 from jevcraft.actions.generator import ActionGenerator
 from jevcraft.actions.hierarchy import ChoiceTree
 from jevcraft.actions.pruner import prune
+from jevcraft.agents.encoding import compact_request_payload
 from jevcraft.agents.providers import DecisionProvider
 from jevcraft.evaluation.logger import MatchLogger
 from jevcraft.models import DecisionRequest, NoulQuestion, Observation, ProviderResult
@@ -64,12 +65,18 @@ class AgentLoop:
     def staged(self) -> bool:
         return bool(getattr(self.provider, "supports_value", False))
 
-    def _request(self, state: dict, questions: dict) -> DecisionRequest:
-        request = DecisionRequest(state=state, questions=questions, priorities={})
+    def _request(
+        self, state: dict, questions: dict, choice_tree: dict | None = None
+    ) -> DecisionRequest:
+        request = DecisionRequest(
+            state=state, questions=questions, choice_tree=choice_tree, priorities={}
+        )
         # Measure the actual wire payload (state + questions), not the full
         # model_dump which includes priorities never sent to the provider.
         payload = json.dumps(
-            {
+            compact_request_payload(request, self.provider.model, choice_tree)
+            if self.staged
+            else {
                 "model": self.provider.model,
                 "state": state,
                 "questions": {k: v.model_dump() for k, v in request.questions.items()},
@@ -81,16 +88,36 @@ class AgentLoop:
             raise ValueError("request_size_guard")
         return request
 
-    def _context(self, state: dict, actions: list, history: list[dict], latest_value=None) -> dict:
+    def _wire_bytes(self, request: DecisionRequest, choice_tree: dict | None = None) -> int | None:
+        if not self.staged:
+            return None
+        return len(
+            json.dumps(
+                compact_request_payload(request, self.provider.model, choice_tree),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode()
+        )
+
+    def _context(
+        self,
+        state: dict,
+        actions: list,
+        latest_value=None,
+        choice_tree: dict | None = None,
+    ) -> dict:
         # Match history remains in local traces. The current observation,
         # StateBuilder's enemy memory, and the complete candidate list are
         # sent to Jev; repeating the lossless event log exhausts its context.
-        return {
+        context = {
             **state,
             "observation": state.get("observation", state),
             "candidate_actions": [a.model_dump(exclude={"priority"}) for a in actions],
             "latest_value": latest_value,
         }
+        if choice_tree is not None:
+            context["choice_tree"] = choice_tree
+        return context
 
     async def _call(self, request: DecisionRequest, deadline: float):
         remaining = deadline - time.monotonic()
@@ -154,6 +181,7 @@ class AgentLoop:
             actions,
             instructions=LIVE_POLICY_INSTRUCTIONS if staged else POLICY_INSTRUCTIONS,
         )
+        choice_tree = {node: dict(options) for node, options in tree.nodes.items()}
         selected, path, reason, error = actions[0], [], None, None
         provider_http_status = None
         value_result = policy_result = None
@@ -166,7 +194,9 @@ class AgentLoop:
                 reason = "provider_cooldown"
             elif staged:
                 value_state = self._context(
-                    state, actions, self.history.snapshot(), self.latest_value
+                    state,
+                    actions,
+                    self.latest_value,
                 )
                 value_request = self._request(
                     value_state,
@@ -185,9 +215,12 @@ class AgentLoop:
                 policy_questions = tree.request.questions
                 if policy_questions:
                     policy_state = self._context(
-                        state, actions, self.history.snapshot(), self.latest_value
+                        state,
+                        actions,
+                        self.latest_value,
+                        choice_tree,
                     )
-                    policy_request = self._request(policy_state, policy_questions)
+                    policy_request = self._request(policy_state, policy_questions, choice_tree)
                     if deadline - time.monotonic() <= 0:
                         raise asyncio.TimeoutError()
                     attempted_stage, call_started = "policy", time.perf_counter()
@@ -248,7 +281,13 @@ class AgentLoop:
                 "calls": calls,
                 "latency_ms": (time.monotonic() - step_started) * 1000,
                 "value_request": value_request.model_dump() if value_request is not None else None,
+                "value_request_bytes": self._wire_bytes(value_request)
+                if value_request is not None
+                else None,
                 "policy_request": policy_request.model_dump()
+                if policy_request is not None
+                else None,
+                "policy_request_bytes": self._wire_bytes(policy_request, choice_tree)
                 if policy_request is not None
                 else None,
                 "error": error,

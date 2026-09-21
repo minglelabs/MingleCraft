@@ -55,6 +55,7 @@ class ChoiceTree:
         self.request = DecisionRequest(
             state=request_state,
             questions=questions,
+            choice_tree={node: dict(options) for node, options in self.nodes.items()},
             priorities={k: self.priorities[k] for k in questions},
         )
 

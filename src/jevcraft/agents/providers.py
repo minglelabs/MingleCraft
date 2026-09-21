@@ -4,6 +4,7 @@ from typing import Protocol
 
 import httpx
 
+from jevcraft.agents.encoding import compact_request_payload
 from jevcraft.models import ChoiceAnswer, DecisionRequest, ProviderResult
 
 
@@ -61,11 +62,7 @@ class JevProvider:
             response = await client.post(
                 self.endpoint,
                 headers={"Authorization": f"Bearer {self.api_key}"},
-                json={
-                    "model": self.model,
-                    "state": request.state,
-                    "questions": {k: v.model_dump() for k, v in request.questions.items()},
-                },
+                json=compact_request_payload(request, self.model),
             )
             if response.is_error:
                 detail = response.text[:800].replace(self.api_key, "[REDACTED]")

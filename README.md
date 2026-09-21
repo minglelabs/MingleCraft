@@ -19,7 +19,7 @@ This is an initial v0.1 implementation. Python end-to-end tests use a determinis
 Implemented:
 
 - Terran SCV/Marine production, mineral gathering, Supply Depot/Barracks construction, worker scouting, squad attack-move, defense and retreat.
-- Resource/supply checks plus BWAPI capability checks. Baseline providers use the bounded candidate path; Jev receives every candidate represented by the supported finite TvT contract, which can exceed 50.
+- Resource/supply checks plus BWAPI capability checks. Baseline providers use the bounded candidate path; Jev receives every candidate represented by the supported finite TvT contract, which can exceed 50. Its wire payload uses compact entity/action tables and references instead of repeated descendant descriptions; legal choices and command mapping are preserved.
 - Category → squad/producer group → concrete action. Jev makes two sequential calls per eligible step: a Noul win-probability forecast followed by Choice policy selection. Both are roles of the same Jev model, not separate trained networks or measured win rates.
 - Game-frame scheduling: micro/economy 6 frames, production 24 frames, construction/scouting 72 frames.
 - A non-blocking Windows BWAPI module with one inference in flight, response expiry, command revalidation and duplicate-order suppression.
@@ -61,7 +61,7 @@ Each demo produces `runs/demo_<id>/manifest.json`, `decisions.jsonl` and `summar
 | `openai` | `OPENAI_API_KEY`, `--model` | Strict JSON-schema choices; no invented probabilities |
 | `local` | `--model`, optional `--base-url` | OpenAI-compatible structured-output endpoint |
 
-The `demo` command defaults to **rule** so it runs without credentials. The live `serve` command defaults to **jev** and therefore requires `TYPESAFE_API_KEY`; selecting a remote provider explicitly enables billable calls. Use `--strategy-file PATH` to replace the bundled strategy and `--request-size-limit BYTES` to set the cumulative request guard.
+The `demo` command defaults to **rule** so it runs without credentials. The live `serve` command defaults to **jev** and therefore requires `TYPESAFE_API_KEY`; selecting a remote provider explicitly enables billable calls. The bundled strategy and cumulative history are currently omitted from live requests; `--strategy-file PATH` does not re-enable strategy transmission. Use `--request-size-limit BYTES` to set the per-request byte guard.
 
 ```bash
 # Recommended when you do not have a direct TypeSafe account:
@@ -79,7 +79,7 @@ jevcraft serve --provider openai --model YOUR_MODEL --deadline-ms 800
 jevcraft serve --provider local --model YOUR_MODEL --base-url http://127.0.0.1:8000/v1
 ```
 
-The direct Jev adapter implements the [official TypeSafe HTTP contract](https://docs.typesafe.ai/api): `POST /v1/systemone`, structured `state`, `model`, and typed `questions`. The OpenRouter Jev adapter sends the same typed request to OpenRouter's Jev Decisions endpoint using `OPENROUTER_API_KEY` and the `~typesafe/jev-latest` model route. Each eligible Jev step sends a Noul `win_probability` request, records its result, then sends the Choice policy request with that fresh value and the complete timestamped history. Noul is used for the yes/no win forecast; Choice probabilities select among legal actions. Neither is an empirical calibration claim. See [Jev primitives](https://docs.typesafe.ai/primitives) and [the stage contract](docs/jev-policy.md).
+The direct Jev adapter implements the [official TypeSafe HTTP contract](https://docs.typesafe.ai/api): `POST /v1/systemone`, structured `state`, `model`, and typed `questions`. The OpenRouter Jev adapter sends the same typed request to OpenRouter's Jev Decisions endpoint using `OPENROUTER_API_KEY` and the `~typesafe/jev-latest` model route. Each eligible Jev step sends a Noul `win_probability` request, records its result, then sends the Choice policy request with that fresh value and the current game state. Cumulative history remains local; remote payloads omit the archived strategy. Noul is used for the yes/no win forecast; Choice probabilities select among legal actions. Neither is an empirical calibration claim. See [Jev primitives](https://docs.typesafe.ai/primitives) and [the stage contract](docs/jev-policy.md).
 
 All providers receive the same state and finite questions. Heuristic priorities are private to the rule baseline and pruner. Random is uniform **per hierarchy node**, not over all leaf actions. Direct Jev and OpenRouter Jev return model probabilities/confidence; rule, random, OpenAI and local providers do not invent calibrated confidence.
 
@@ -115,7 +115,7 @@ The native BWAPI 4.4.0 module runs inside **32-bit StarCraft: Brood War 1.16.1 o
 6. In Chaoslauncher, enable the BWAPI **Release** injector. Create a 1v1 Terran vs Terran match on `(2)Destination.scx`. Supply the map yourself; no Blizzard game/map files are distributed here. If your map has a different filename, pass the exact BWAPI filename with `--map`.
 7. Inspect `runs/bwapi_<id>/` after the game. Confirm real execution receipts and `mode: "live"` before trying `--provider jev`.
 
-The bridge sets 42 ms/frame, samples no faster than every 6 game frames, and permits only one decision sequence in flight. **2–4 decisions/second is a target**, not a verified result: two sequential inferences, network time, state construction, candidate count, and growing history affect throughput. Existing orders continue during inference. A shared per-step deadline, request-size guard, and 24-frame expiry prevent late or oversized choices from silently acting on stale state. Provider errors produce a logged `wait`, never an unreported baseline takeover.
+The bridge sets 42 ms/frame, samples no faster than every 6 game frames, and permits only one decision sequence in flight. **2–4 decisions/second is a target**, not a verified result: two sequential inferences, network time, state construction, and candidate count affect throughput. Existing orders continue during inference. A shared per-step deadline, request-size guard, and 24-frame expiry prevent late or oversized choices from silently acting on stale state. Provider errors produce a logged `wait`, never an unreported baseline takeover.
 
 ## Evaluation and reproducibility
 
@@ -152,3 +152,5 @@ Implement `DecisionProvider.decide(DecisionRequest) -> ProviderResult` to add an
 ## License
 
 JevCraft code is MIT licensed. BWAPI is a separate LGPL dependency; nlohmann/json is MIT licensed. See [third-party notices](THIRD_PARTY_NOTICES.md). StarCraft and Brood War are Blizzard trademarks. This project is not affiliated with Blizzard or TypeSafe.
+
+Provider research and integration caveats: [Realtime provider alternatives](docs/provider-alternatives.md).

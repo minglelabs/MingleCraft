@@ -51,6 +51,8 @@ def test_jev_value_then_policy_has_fresh_value_and_history(observation, tmp_path
     assert list(value.questions) == ["win_probability"]
     assert "latest_value" not in value.state or value.state["latest_value"] is None
     assert policy.state["latest_value"] == {"frame": 0, "win_probability": 0.63}
+    assert "choice_tree" not in value.state
+    assert "choice_tree" in policy.state
     assert "match_history" not in value.state
     assert "match_history" not in policy2.state
     history = loop.history.snapshot()

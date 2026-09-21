@@ -2,7 +2,38 @@
 
 This document defines the prompts and state contract used by JevCraft. The value and policy stages are two inference roles of the same Jev/System One model. They are not separately trained reinforcement-learning networks, and their outputs are not measured or calibrated win rates.
 
-## Ready-to-use prompts
+## Current live runtime
+
+The live Jev path currently omits the bundled strategy and cumulative match history from remote requests following context-limit failures. The strategy text below remains an archived reference; it is not the active wire prompt. `--strategy-file` does not enable strategy transmission in this mode. Full observations, legal actions, receipts, and match history remain available locally; remote input retains current visible state and dated enemy memory. Compact representations must preserve the available candidates and their exact local execution mapping.
+
+The value and policy calls remain sequential. Compact payload size is measured in UTF-8 bytes; it is not an exact Jev token count or proof of live API acceptance. Validate changes with fresh live decision/receipt traces before claiming successful gameplay.
+
+## Compact live wire format
+
+Direct Jev and OpenRouter Jev requests use `state.schema = "jev/compact-v1"`. Local observations, actions, and execution envelopes keep the normal typed objects. Only provider-bound JSON changes:
+
+- Repeated entity and action objects become `columns` / `rows` tables. Every current observation field, supported legal action, and command parameter is preserved; baseline-only priority scores stay private.
+- Positions use `[x, y]`; command and construction-site rows have an explicit legend.
+- Choice criteria reference an action or another decision node instead of repeating every descendant action label at each hierarchy level. Labels and commands remain in the action table. Single-option branches remain reachable.
+- The value request contains current state and every candidate but does not need the policy hierarchy. Policy receives the fresh estimate and the hierarchy. The two-call design is unchanged.
+- `value_request_bytes` and `policy_request_bytes` record compact UTF-8 request size. Logged request objects retain their readable local representation. API `usage.input_tokens` is the source for actual provider token counts; byte reduction does not guarantee equivalent token reduction.
+
+Current visible enemies and dated last sightings remain distinct. This encoding does not reconstruct information missing from BWAPI, restore cumulative history to the prompt, invent targets, or enable model-generated actions.
+
+### Offline replay measurement (2026-09-21)
+
+The captured run `bwapi_29908_1789891637947956` was re-encoded without making API calls. Sizes include model, state, questions, and the compact legend. The old side uses the captured request (already excluding strategy and history); the new side preserves its observations and candidates. This is not a live performance or exact token benchmark.
+
+| Frame | Candidates | Stage | Original bytes | Compact bytes | Reduction |
+| --- | ---: | --- | ---: | ---: | ---: |
+| 0 | 58 | Value | 15,766 | 9,503 | 39.7% |
+| 0 | 58 | Policy | 24,209 | 15,284 | 36.9% |
+| 2199 | 212 | Value | 60,344 | 32,617 | 45.9% |
+| 2199 | 212 | Policy | 85,471 | 45,655 | 46.6% |
+
+The captured frame-2199 value call used 32,306 Jev input tokens; the following policy call failed with HTTP 400. New live token counts, error rates, decision quality, and latency remain unmeasured. Large later-game states can still exceed provider limits; compression is not an unbounded-context guarantee.
+
+## Archived reference prompts
 
 ### Value stage: Noul win probability
 
@@ -57,7 +88,7 @@ This stage returns Choice answers for the finite candidate hierarchy. The probab
 
 ## Shared supplied strategy
 
-The following is the complete shared strategy supplied to both stages as `strategy_policy`. It is the attached strategy verbatim and is sourced by `SHARED_POLICY` from `strategy/prompt.py`.
+The following is the archived shared strategy, currently omitted from both remote stages. It is the attached strategy verbatim and is sourced by `SHARED_POLICY` from `strategy/prompt.py`.
 
 ```text
 You are a strategic decision maker for StarCraft: Brood War 1v1 under partial observability. At every observation, choose one option from the finite set of legal action candidates. Combine scouting facts, resources, production, army, terrain, technology, upgrades, and the age of the enemy's last sighting. The goal is not to recite a build order mechanically. The goal is to choose the action with the highest chance of survival and the best continuation from the current state.
@@ -453,7 +484,7 @@ This policy contains strategic references for all six matchups, but the current 
 Always validate the final choice in this order: immediate lethal threat -> facts versus hypotheses -> legal candidates -> required build conditions -> supply, production, and detection -> the lowest-risk choice that preserves the goal -> re-evaluation at the next observation frame.
 ```
 
-## Sequential architecture
+## Original full-context architecture (reference only)
 
 For an eligible Jev step, runtime performs two sequential calls:
 
@@ -466,7 +497,7 @@ The second call is sequential because the policy must consume the fresh value es
 
 Baselines may continue to use their existing one-stage behavior. The demo remains rule based; the live `serve` default is Jev when the runtime implementation enables that default. No live API key or live response is assumed by this document.
 
-## Full timestamped match history
+## Full timestamped local match history
 
 History is cumulative for one match and resets at match boundaries. Every event has:
 
@@ -484,7 +515,7 @@ The current implementation uses these event classes:
 
 Missing observations are not negative evidence. A visible enemy is a fact only at the timestamp where it was visible; last-seen state is dated and may be stale. A public start location remains a hypothesis. Repeated receipt windows are deduplicated by `decision_id`.
 
-The current observation is supplied separately as `observation`; history is not a replacement for it. The value stage must reassess from observations rather than anchor on `latest_value` or older estimates. The policy stage may use the fresh `latest_value` as one signal, while still obeying immediate-threat, legality, uncertainty, and candidate rules.
+The current observation is supplied to the model; cumulative history remains local and is not a replacement for it. The value stage must reassess from observations rather than anchor on `latest_value` or older estimates. The policy stage may use the fresh `latest_value` as one signal, while still obeying immediate-threat, legality, uncertainty, and candidate rules.
 
 ## Candidates, prompts, and safety boundary
 

@@ -166,6 +166,7 @@ class ProviderResult(Model):
 class DecisionRequest(Model):
     state: dict
     questions: dict[str, ChoiceQuestion | NoulQuestion]
+    choice_tree: dict[str, dict[str, str]] | None = None
     # Baselines only; deliberately excluded from remote model payloads.
     priorities: dict[str, dict[str, float]]
 
