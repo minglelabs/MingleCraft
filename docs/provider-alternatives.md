@@ -2,7 +2,7 @@
 
 Research date: 2026-09-21. This is a provider-selection note, not a provider switch. Model IDs below are exact IDs shown in current provider model or pricing documentation on the research date; announcement names and retired aliases are excluded.
 
-## JevCraft baseline and decision target
+## MingleCraft baseline and decision target
 
 The current `src/jevcraft/agents/providers.py` already has an `OpenAIProvider` that sends one `/chat/completions` request, accepts a configurable `base_url` when instantiated programmatically, and builds a strict JSON Schema whose string enums come from each question's current `criteria`. This is the lowest-risk switching path.
 
@@ -16,7 +16,7 @@ The latest post-history-removal live trace `bwapi_29908_1789891637947956` report
 | Serial total maximum | 3,125 ms |
 | Maximum actions in a step | 218 |
 
-The practical target is one successful decision request per step. A provider's tokens-per-second figure is not an end-to-end latency result: request upload, input prefill, queueing, schema-constrained decoding, network RTT, and JSON validation all remain in the path. No provider documentation found here publishes a JevCraft-equivalent first-success latency, so latency must be measured with the real 32K-token class payload and up to 218 dynamic action enums.
+The practical target is one successful decision request per step. A provider's tokens-per-second figure is not an end-to-end latency result: request upload, input prefill, queueing, schema-constrained decoding, network RTT, and JSON validation all remain in the path. No provider documentation found here publishes a MingleCraft-equivalent first-success latency, so latency must be measured with the real 32K-token class payload and up to 218 dynamic action enums.
 
 ## Ranked candidates
 
@@ -24,13 +24,13 @@ The practical target is one successful decision request per step. A provider's t
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `gpt-5-nano` | 400,000 context; 128,000 max output | Current model page lists Structured Outputs; the existing adapter's dynamic string `enum` schema is the intended shape | Input $0.05; cached input $0.005; output $0.40 | OpenAI calls it the fastest, cheapest GPT-5 version and positions it for classification. That is the closest documented workload match, but no public E2E decision latency is supplied. | Low in code: existing Chat Completions adapter and model string; account/model behavior still needs a live probe. |
 | 2 | `gpt-5.6-luna` | 1,050,000 context; 128,000 max output | Current catalog lists Structured Outputs; `reasoning.effort=none` is supported by the model page, but the current adapter does not expose that parameter | Input $0.20; cached input $0.02; output $1.20 | Current catalog describes it as cost-sensitive, high-volume, and supports no-reasoning mode. It is a stronger current-family candidate, but using `none` requires a later adapter parameter change and no public E2E decision latency is supplied. | Low model-protocol scope, but not a CLI-only switch if `reasoning.effort=none` is required. |
-| 3 | `gemini-3.1-flash-lite` | 1,048,576 input; 65,536 output | Current stable model page lists Structured Outputs; Google's JSON Schema subset explicitly supports string `enum` | Input $0.25; output $1.50 | Google describes it as low-latency and cost-efficient, but that is product positioning, not a JevCraft E2E number. It is the current GA choice over 2.5 Flash-Lite when model generation currency matters. | Medium: add a Gemini adapter or endpoint-specific request/response mapping. |
+| 3 | `gemini-3.1-flash-lite` | 1,048,576 input; 65,536 output | Current stable model page lists Structured Outputs; Google's JSON Schema subset explicitly supports string `enum` | Input $0.25; output $1.50 | Google describes it as low-latency and cost-efficient, but that is product positioning, not a MingleCraft E2E number. It is the current GA choice over 2.5 Flash-Lite when model generation currency matters. | Medium: add a Gemini adapter or endpoint-specific request/response mapping. |
 | Control | `gpt-4.1-mini` | 1,047,576 context; 32,768 max output | Strict Structured Outputs; the existing adapter already emits per-question dynamic `enum` values | Input $0.40; cached input $0.10; output $1.60 | It remains the cleanest explicitly non-reasoning baseline and is useful for isolating model-generation effects from integration effects. | Lowest-risk baseline: existing adapter and model string. |
 | Latency control | `openai/gpt-oss-20b` on Groq | 131,072 context; 65,536 max completion | Groq strict mode supports this exact model and guarantees schema-constrained output; strict mode does not support streaming or tool use | Input $0.075; output $0.30 | Groq publishes about 1,000 tokens/s for this model. That is decode throughput only; 32K input prefill, queueing, rate limits, and schema decoding still need measurement. | Low in code: the API is OpenAI-compatible, but the current CLI does not expose its base URL for `--provider openai`. |
 
 ## Recommendation
 
-The revised first candidate is `gpt-5-nano` with one policy call. It is the current catalog's fastest/cheapest GPT-5 tier, its 400K context comfortably exceeds the observed 32,306 input tokens, and its documented workload fit is classification. `gpt-5.6-luna` is the higher-capability current-family follow-up; use it only after exposing and setting `reasoning.effort=none` if the latency objective requires that mode. `gpt-4.1-mini` remains the control because it is explicitly non-reasoning and already matches the adapter's tested strict-schema path. None of these documented properties proves lower JevCraft E2E latency.
+The revised first candidate is `gpt-5-nano` with one policy call. It is the current catalog's fastest/cheapest GPT-5 tier, its 400K context comfortably exceeds the observed 32,306 input tokens, and its documented workload fit is classification. `gpt-5.6-luna` is the higher-capability current-family follow-up; use it only after exposing and setting `reasoning.effort=none` if the latency objective requires that mode. `gpt-4.1-mini` remains the control because it is explicitly non-reasoning and already matches the adapter's tested strict-schema path. None of these documented properties proves lower MingleCraft E2E latency.
 
 Run `gemini-3.1-flash-lite` as the current Google alternative and `openai/gpt-oss-20b` on Groq as the throughput-focused control. Gemini 2.5 Flash-Lite is still callable and materially cheaper ($0.10/$0.40), but it is an older generation; choose it only if the cost advantage survives the real decision-quality and latency test. The `gemini-3.1-flash-lite-preview` name is not a candidate: Google says that preview was shut down and replaced by the stable `gemini-3.1-flash-lite` ID.
 
@@ -50,7 +50,7 @@ All links were checked on 2026-09-21.
 - [OpenAI GPT-5.4 Mini model card](https://developers.openai.com/api/docs/models/gpt-5.4-mini): newer mini-family comparison point; 400K context, Structured Outputs, reasoning support, and higher documented price.
 - [OpenAI GPT-5.4 nano model card](https://developers.openai.com/api/docs/models/gpt-5.4-nano): newer nano-family comparison point; 400K context, Structured Outputs, and lower documented price, but still a reasoning-capable family.
 - [OpenAI model catalog](https://developers.openai.com/api/docs/models): current catalog and deprecated-model list; `gpt-4.1-nano` and older GPT-5 snapshots are not treated as the primary recommendation.
-- [OpenAI Fast Mode](https://openai.com/api-fast-mode/): separate throughput/latency service claims; not used as an E2E JevCraft estimate.
+- [OpenAI Fast Mode](https://openai.com/api-fast-mode/): separate throughput/latency service claims; not used as an E2E MingleCraft estimate.
 - [Google Gemini 2.5 Flash-Lite model page](https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash-lite): exact ID, limits, capabilities, and low-latency positioning.
 - [Google Gemini 3.1 Flash-Lite model page](https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite): stable exact ID, limits, Structured Outputs, and low-latency positioning.
 - [Google Gemini model catalog](https://ai.google.dev/gemini-api/docs/models): current callable model list and lifecycle status.

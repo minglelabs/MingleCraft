@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 
-from jevcraft.models import Action, Observation
+from minglecraft.models import Action, Observation
 
 
 class MatchHistory:

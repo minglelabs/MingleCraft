@@ -1,5 +1,5 @@
-from jevcraft.actions.generator import ActionGenerator
-from jevcraft.models import BuildSite, Enemy, Location, Position, Unit
+from minglecraft.actions.generator import ActionGenerator
+from minglecraft.models import BuildSite, Enemy, Location, Position, Unit
 
 
 def test_exhaustive_includes_busy_workers_targets_and_all_scouts(observation):
@@ -168,8 +168,8 @@ def test_constructing_worker_has_no_movement_candidates(observation):
 
 
 def test_gas_gathering_and_special_abilities_and_groups():
-    from jevcraft.actions.generator import ActionGenerator
-    from jevcraft.models import Mineral, Observation, Position, Unit
+    from minglecraft.actions.generator import ActionGenerator
+    from minglecraft.models import Mineral, Observation, Position, Unit
 
     obs = Observation(
         match_id="test_match",

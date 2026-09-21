@@ -69,7 +69,7 @@ Changing the shared provider deadline does not change bridge transport timeouts.
 Example for initial live testing (not a measured latency guarantee):
 
 ```sh
-jevcraft serve --provider jev --single-stage --map "(2)Destination.scx" --spatial-precision-px 8 --deadline-ms 10000 --ttl-frames 480
+minglecraft serve --provider jev --single-stage --map "(2)Destination.scx" --spatial-precision-px 8 --deadline-ms 10000 --ttl-frames 480
 ```
 
 Rebuild and replace the Windows bridge DLL to provide actual map dimensions, then restart the Python service. Inspect receipts for stale decisions and adjust the budgets to the actual game speed and measured latency. A large TTL accepts older state; it does not make inference faster. Use `--spatial-precision-px 1` to refine down to individual pixels, at the cost of additional calls. Map coverage means every pixel belongs to a selectable cell, not that every pixel is selectable at the default precision. Terrain/pathing data is not added by this change.

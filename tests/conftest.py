@@ -1,6 +1,6 @@
 import pytest
 
-from jevcraft.bwapi.synthetic import SyntheticGame
+from minglecraft.bwapi.synthetic import SyntheticGame
 
 
 @pytest.fixture

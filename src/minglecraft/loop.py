@@ -6,12 +6,12 @@ from pathlib import Path
 
 import httpx
 
-from jevcraft import __version__
-from jevcraft.actions.executor import envelope
-from jevcraft.actions.generator import ActionGenerator
-from jevcraft.actions.hierarchy import ChoiceTree
-from jevcraft.actions.pruner import prune
-from jevcraft.actions.spatial import (
+from minglecraft import __version__
+from minglecraft.actions.executor import envelope
+from minglecraft.actions.generator import ActionGenerator
+from minglecraft.actions.hierarchy import ChoiceTree
+from minglecraft.actions.pruner import prune
+from minglecraft.actions.spatial import (
     build_refinement_question,
     build_region_question,
     child_bounds,
@@ -19,10 +19,10 @@ from jevcraft.actions.spatial import (
     parse_refinement_key,
     parse_region_key,
 )
-from jevcraft.agents.encoding import compact_request_payload
-from jevcraft.agents.providers import DecisionProvider
-from jevcraft.evaluation.logger import MatchLogger
-from jevcraft.models import (
+from minglecraft.agents.encoding import compact_request_payload
+from minglecraft.agents.providers import DecisionProvider
+from minglecraft.evaluation.logger import MatchLogger
+from minglecraft.models import (
     ChoiceQuestion,
     DecisionRequest,
     NoulQuestion,
@@ -30,10 +30,10 @@ from jevcraft.models import (
     Position,
     ProviderResult,
 )
-from jevcraft.state import StateBuilder
-from jevcraft.state.history import MatchHistory
-from jevcraft.strategy.policy import POLICY_INSTRUCTIONS, SHARED_POLICY
-from jevcraft.strategy.scheduler import Scheduler
+from minglecraft.state import StateBuilder
+from minglecraft.state.history import MatchHistory
+from minglecraft.strategy.policy import POLICY_INSTRUCTIONS, SHARED_POLICY
+from minglecraft.strategy.scheduler import Scheduler
 
 LIVE_VALUE_INSTRUCTIONS = "Estimate the chance of ultimately winning from the supplied game state. Return only the requested Noul probability."
 
@@ -377,7 +377,7 @@ class AgentLoop:
             if isinstance(exc, httpx.HTTPStatusError):
                 provider_http_status = exc.response.status_code
                 # Do not log headers, credentials, or provider response bodies.
-                print(f"JevCraft provider HTTP error: {provider_http_status}", flush=True)
+                print(f"MingleCraft provider HTTP error: {provider_http_status}", flush=True)
             reason = (
                 "deadline"
                 if isinstance(exc, (TimeoutError, asyncio.TimeoutError))

@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from jevcraft.models import Action
+from minglecraft.models import Action
 
 
 def prune(actions: list[Action], limit: int = 50) -> list[Action]:

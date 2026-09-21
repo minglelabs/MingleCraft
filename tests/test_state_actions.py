@@ -3,13 +3,13 @@ import asyncio
 import pytest
 from pydantic import ValidationError
 
-from jevcraft.actions.generator import ActionGenerator
-from jevcraft.actions.hierarchy import ChoiceTree
-from jevcraft.actions.pruner import prune
-from jevcraft.agents import RandomProvider, RuleBasedProvider
-from jevcraft.models import ChoiceAnswer, Enemy, Position, Unit
-from jevcraft.state import StateBuilder
-from jevcraft.strategy.scheduler import Scheduler
+from minglecraft.actions.generator import ActionGenerator
+from minglecraft.actions.hierarchy import ChoiceTree
+from minglecraft.actions.pruner import prune
+from minglecraft.agents import RandomProvider, RuleBasedProvider
+from minglecraft.models import ChoiceAnswer, Enemy, Position, Unit
+from minglecraft.state import StateBuilder
+from minglecraft.strategy.scheduler import Scheduler
 
 
 def generate(obs):
@@ -177,7 +177,7 @@ def test_random_provider_seed_is_reproducible(observation):
 
 
 def test_complete_map_and_duplicate_ids_are_rejected(observation):
-    from jevcraft.models import Observation
+    from minglecraft.models import Observation
 
     payload = observation.model_dump()
     payload["complete_map_information"] = True

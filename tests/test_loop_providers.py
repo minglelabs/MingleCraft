@@ -4,18 +4,18 @@ import json
 import httpx
 import pytest
 
-from jevcraft.actions.generator import ActionGenerator
-from jevcraft.actions.hierarchy import ChoiceTree
-from jevcraft.agents import (
+from minglecraft.actions.generator import ActionGenerator
+from minglecraft.actions.hierarchy import ChoiceTree
+from minglecraft.agents import (
     JevProvider,
     OpenAIProvider,
     OpenRouterJevProvider,
     RuleBasedProvider,
 )
-from jevcraft.agents.encoding import compact_request_payload
-from jevcraft.bwapi.synthetic import SyntheticGame
-from jevcraft.loop import AgentLoop
-from jevcraft.models import (
+from minglecraft.agents.encoding import compact_request_payload
+from minglecraft.bwapi.synthetic import SyntheticGame
+from minglecraft.loop import AgentLoop
+from minglecraft.models import (
     Action,
     BuildSite,
     ChoiceAnswer,
@@ -27,7 +27,7 @@ from jevcraft.models import (
     ProviderResult,
     Receipt,
 )
-from jevcraft.strategy.scheduler import Scheduler
+from minglecraft.strategy.scheduler import Scheduler
 
 
 def test_synthetic_loop_runs_economy_production_and_logging(tmp_path):

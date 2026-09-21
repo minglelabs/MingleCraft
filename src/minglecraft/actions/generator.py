@@ -1,6 +1,6 @@
 from collections import Counter
 
-from jevcraft.models import Action, Command, Observation, Position
+from minglecraft.models import Action, Command, Observation, Position
 
 
 def _is_worker(u) -> bool:
@@ -281,6 +281,41 @@ class ActionGenerator:
 
         if "economy" in due:
             for worker in workers:
+                # Expose all visible mineral patches and all completed refineries to every worker
+                for mineral_id, mineral in minerals.items():
+                    add(
+                        Action(
+                            id=f"gather_{worker.id}_{mineral.id}",
+                            category="economy",
+                            group="workers",
+                            label=f"Send {'idle ' if worker.idle else ''}SCV {worker.id} to visible mineral patch {mineral.id}",
+                            priority=100 if worker.idle else 0,
+                            commands=(
+                                Command(
+                                    kind="gather",
+                                    unit_ids=(worker.id,),
+                                    target_id=mineral.id,
+                                ),
+                            ),
+                        )
+                    )
+                for refinery_id, refinery in refineries.items():
+                    add(
+                        Action(
+                            id=f"gather_gas_{worker.id}_{refinery.id}",
+                            category="economy",
+                            group="workers",
+                            label=f"Send {'idle ' if worker.idle else ''}SCV {worker.id} to {refinery.type} {refinery.id}",
+                            priority=100 if worker.idle else 0,
+                            commands=(
+                                Command(
+                                    kind="gather",
+                                    unit_ids=(worker.id,),
+                                    target_id=refinery.id,
+                                ),
+                            ),
+                        )
+                    )
                 for target_id in worker.can_gather:
                     if target_id in minerals:
                         mineral = minerals[target_id]

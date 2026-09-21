@@ -4,7 +4,7 @@ import json
 import httpx
 import pytest
 
-from jevcraft.actions.spatial import (
+from minglecraft.actions.spatial import (
     SpatialGridSpec,
     build_refinement_question,
     build_region_question,
@@ -12,10 +12,10 @@ from jevcraft.actions.spatial import (
     parse_refinement_key,
     parse_region_key,
 )
-from jevcraft.agents import JevProvider
-from jevcraft.bwapi.synthetic import SyntheticGame
-from jevcraft.loop import AgentLoop
-from jevcraft.models import ChoiceAnswer, NoulAnswer, ProviderResult
+from minglecraft.agents import JevProvider
+from minglecraft.bwapi.synthetic import SyntheticGame
+from minglecraft.loop import AgentLoop
+from minglecraft.models import ChoiceAnswer, NoulAnswer, ProviderResult
 
 
 def test_spatial_grid_coverage():

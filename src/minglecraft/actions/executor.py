@@ -1,4 +1,4 @@
-from jevcraft.models import Action, DecisionEnvelope, Observation
+from minglecraft.models import Action, DecisionEnvelope, Observation
 
 
 def envelope(obs: Observation, action: Action, sequence: int, ttl_frames: int, reason=None):

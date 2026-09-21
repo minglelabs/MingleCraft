@@ -3,7 +3,7 @@ requires = ["hatchling>=1.25,<2"]
 build-backend = "hatchling.build"
 
 [project]
-name = "jevcraft"
+name = "minglecraft"
 version = "0.1.0"
 description = "A model-agnostic real-time decision harness for StarCraft: Brood War"
 readme = "README.md"
@@ -15,7 +15,8 @@ dependencies = ["httpx>=0.28,<0.29", "pydantic>=2.10,<3"]
 dev = ["pytest>=8,<9", "ruff>=0.11,<1"]
 
 [project.scripts]
-jevcraft = "jevcraft.cli:main"
+minglecraft = "minglecraft.cli:main"
+jevcraft = "minglecraft.cli:main"
 
 [tool.ruff]
 target-version = "py310"

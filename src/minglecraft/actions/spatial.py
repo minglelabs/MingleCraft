@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from jevcraft.models import ChoiceQuestion, Observation
+from minglecraft.models import ChoiceQuestion, Observation
 
 DEFAULT_GRID_SIZE = 8
 DEFAULT_PRECISION_PX = 8

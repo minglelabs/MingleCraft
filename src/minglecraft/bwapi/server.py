@@ -5,7 +5,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from pydantic import ValidationError
 
-from jevcraft.models import Observation
+from minglecraft.models import Observation
 
 
 class BridgeApplication:

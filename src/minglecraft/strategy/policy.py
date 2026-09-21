@@ -1,6 +1,6 @@
 """User strategy and stage-specific Jev instructions."""
 
-from jevcraft.strategy.prompt import JEV_ENGLISH_POLICY
+from minglecraft.strategy.prompt import JEV_ENGLISH_POLICY
 
 SHARED_POLICY = JEV_ENGLISH_POLICY
 

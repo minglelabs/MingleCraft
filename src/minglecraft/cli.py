@@ -5,7 +5,7 @@ import os
 import uuid
 from pathlib import Path
 
-from jevcraft.agents import (
+from minglecraft.agents import (
     JevProvider,
     LocalModelProvider,
     OpenAIProvider,
@@ -13,10 +13,10 @@ from jevcraft.agents import (
     RandomProvider,
     RuleBasedProvider,
 )
-from jevcraft.bwapi.server import BridgeApplication, make_server
-from jevcraft.bwapi.synthetic import SyntheticGame
-from jevcraft.loop import AgentLoop
-from jevcraft.strategy.policy import SHARED_POLICY
+from minglecraft.bwapi.server import BridgeApplication, make_server
+from minglecraft.bwapi.synthetic import SyntheticGame
+from minglecraft.loop import AgentLoop
+from minglecraft.strategy.policy import SHARED_POLICY
 
 
 def provider_for(args):
@@ -38,7 +38,7 @@ def provider_for(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="JevCraft decision harness")
+    parser = argparse.ArgumentParser(description="MingleCraft decision harness")
     sub = parser.add_subparsers(dest="command", required=True)
     for name in ("demo", "serve"):
         command = sub.add_parser(name)
@@ -89,7 +89,7 @@ def main():
         print(json.dumps(records, indent=2))
         return
     if args.command == "schema":
-        from jevcraft.models import Observation
+        from minglecraft.models import Observation
 
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(Observation.model_json_schema(), indent=2) + "\n")
@@ -143,7 +143,7 @@ def main():
             app = BridgeApplication(new_loop, args.map)
             server = make_server(app, args.port)
             print(
-                f"JevCraft listening at http://127.0.0.1:{server.server_port}; provider={args.provider}; map={args.map}",
+                f"MingleCraft listening at http://127.0.0.1:{server.server_port}; provider={args.provider}; map={args.map}",
                 flush=True,
             )
             try:

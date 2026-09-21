@@ -1,9 +1,9 @@
 import asyncio
 import json
 
-from jevcraft.loop import AgentLoop
-from jevcraft.models import Action, ChoiceAnswer, NoulAnswer, ProviderResult, Receipt
-from jevcraft.state.history import MatchHistory
+from minglecraft.loop import AgentLoop
+from minglecraft.models import Action, ChoiceAnswer, NoulAnswer, ProviderResult, Receipt
+from minglecraft.state.history import MatchHistory
 
 
 class StagedProvider:

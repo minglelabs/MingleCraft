@@ -1,6 +1,6 @@
 # Jev policy and two-stage decision contract
 
-This document defines the prompts and state contract used by JevCraft. The value and policy stages are two inference roles of the same Jev/System One model. They are not separately trained reinforcement-learning networks, and their outputs are not measured or calibrated win rates.
+This document defines the prompts and state contract used by MingleCraft. The value and policy stages are two inference roles of the same Jev/System One model. They are not separately trained reinforcement-learning networks, and their outputs are not measured or calibrated win rates.
 
 ## Current live runtime
 
@@ -112,7 +112,7 @@ This document is a strategic reference and decision policy. It is not a fixed sc
 
 Use the following fields when present. Do not fill missing fields with guesses.
 
-- `matchup`, `self_race`, `enemy_race`: race and matchup. The current JevCraft v0.1 Observation is limited to Terran versus Terran, so other matchups can only be executed after the schema, state, and action candidates are extended.
+- `matchup`, `self_race`, `enemy_race`: race and matchup. The current MingleCraft v0.1 Observation is limited to Terran versus Terran, so other matchups can only be executed after the schema, state, and action candidates are extended.
 - `frame`, `game_seconds`: Brood War uses approximately 24 frames per second, but frames are reference points. Network delay, game speed, and map travel distance change actual arrival times.
 - `resources`, `supply_used`, `supply_total`: spendable resources and available supply. Account for reserved construction and production costs and buildings already in progress.
 - `own_counts`, `completed_counts`, `production`, `tech`, `upgrades`, `bases`, `workers`: distinguish completed, under-construction, training, and idle entities.
@@ -479,7 +479,7 @@ When a build is late, apply these rules:
 
 ## 9. Current implementation scope
 
-This policy contains strategic references for all six matchups, but the current JevCraft v0.1 execution contract is limited to a Terran-versus-Terran Observation and an ActionGenerator centered on SCVs, Marines, Supply Depots, and Barracks. Therefore, the current runtime may execute only the TvT decisions represented by its actual candidates. To activate TvZ, TvP, ZvP, ZvZ, and PvP, extend race fields, units, buildings, technology, expansions, upgrades, race-specific action generation, legality validation, and BWAPI command mapping together. Never invent a unit or command from this policy merely because the strategy section mentions it.
+This policy contains strategic references for all six matchups, but the current MingleCraft v0.1 execution contract is limited to a Terran-versus-Terran Observation and an ActionGenerator centered on SCVs, Marines, Supply Depots, and Barracks. Therefore, the current runtime may execute only the TvT decisions represented by its actual candidates. To activate TvZ, TvP, ZvP, ZvZ, and PvP, extend race fields, units, buildings, technology, expansions, upgrades, race-specific action generation, legality validation, and BWAPI command mapping together. Never invent a unit or command from this policy merely because the strategy section mentions it.
 
 Always validate the final choice in this order: immediate lethal threat -> facts versus hypotheses -> legal candidates -> required build conditions -> supply, production, and detection -> the lowest-risk choice that preserves the goal -> re-evaluation at the next observation frame.
 ```

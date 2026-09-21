@@ -6,9 +6,9 @@ import json
 import httpx
 import pytest
 
-from jevcraft.agents.providers import JevProvider, OpenRouterJevProvider
-from jevcraft.models import DecisionRequest, NoulQuestion
-from jevcraft.strategy.policy import SHARED_POLICY, VALUE_INSTRUCTIONS
+from minglecraft.agents.providers import JevProvider, OpenRouterJevProvider
+from minglecraft.models import DecisionRequest, NoulQuestion
+from minglecraft.strategy.policy import SHARED_POLICY, VALUE_INSTRUCTIONS
 
 
 @pytest.mark.parametrize("provider_class", [JevProvider, OpenRouterJevProvider])

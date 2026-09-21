@@ -6,7 +6,7 @@ Synthetic fixtures exercise contracts and state transitions. They do not impleme
 
 For live comparisons, keep the same map **hash**, opponent build/configuration, starting-position schedule, BWAPI version, game speed, hardware, candidate generator, pruning rules, timeout and scheduling policy. Record the repository commit alongside results. `jev-latest` can change; use a pinned model identifier if the service provides one and retain the response's model field in each trace.
 
-Use repeated paired games with balanced starting positions and several seeds. Report sample sizes, failures, confidence intervals and timeout rates alongside win rate. There is no automatic tournament runner in v0.1; `jevcraft report runs` lists completed summary files without pooling incomparable configurations.
+Use repeated paired games with balanced starting positions and several seeds. Report sample sizes, failures, confidence intervals and timeout rates alongside win rate. There is no automatic tournament runner in v0.1; `minglecraft report runs` lists completed summary files without pooling incomparable configurations.
 
 The pruner remains the bounded path for baseline providers. Its cap is 50, not a minimum of 20: early-game states can have only a few actions. Jev receives the complete supported legal candidate set and is not evaluated on a heuristically pruned subset. The rule baseline selects priorities directly; random samples uniformly at each hierarchy node. Those are distinct policies, not interchangeable control groups.
 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(JevCraftBridge VERSION 0.1.0 LANGUAGES CXX)
+project(MingleCraftBridge VERSION 0.1.0 LANGUAGES CXX)
 
 if(NOT WIN32 OR NOT MSVC)
   message(FATAL_ERROR "The BWAPI 4.4.0 bridge requires Windows, MSVC and a Win32 build.")
@@ -29,11 +29,11 @@ FetchContent_Declare(json
   URL_HASH SHA256=d6c65aca6b1ed68e7a182f4757257b107ae403032760ed6ef121c9d55e81757d
 )
 FetchContent_MakeAvailable(json)
-add_library(JevCraft SHARED src/Bridge.cpp src/Http.cpp)
-target_compile_features(JevCraft PRIVATE cxx_std_17)
-target_include_directories(JevCraft PRIVATE "${BWAPI_INCLUDE_DIR}")
-target_link_libraries(JevCraft PRIVATE "${BWAPI_LIBRARY}" nlohmann_json::nlohmann_json winhttp)
-target_compile_definitions(JevCraft PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+add_library(MingleCraft SHARED src/Bridge.cpp src/Http.cpp)
+target_compile_features(MingleCraft PRIVATE cxx_std_17)
+target_include_directories(MingleCraft PRIVATE "${BWAPI_INCLUDE_DIR}")
+target_link_libraries(MingleCraft PRIVATE "${BWAPI_LIBRARY}" nlohmann_json::nlohmann_json winhttp)
+target_compile_definitions(MingleCraft PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 # Match the BWAPI SDK release library's /MD runtime and Release configuration.
-set_property(TARGET JevCraft PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
-target_compile_options(JevCraft PRIVATE /W4 /EHsc)
+set_property(TARGET MingleCraft PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+target_compile_options(MingleCraft PRIVATE /W4 /EHsc)

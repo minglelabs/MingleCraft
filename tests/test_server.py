@@ -5,9 +5,9 @@ import urllib.request
 
 import pytest
 
-from jevcraft.agents import RuleBasedProvider
-from jevcraft.bwapi.server import BridgeApplication, make_server
-from jevcraft.loop import AgentLoop
+from minglecraft.agents import RuleBasedProvider
+from minglecraft.bwapi.server import BridgeApplication, make_server
+from minglecraft.loop import AgentLoop
 
 
 def test_real_http_step_end_and_wrong_map(observation, tmp_path):

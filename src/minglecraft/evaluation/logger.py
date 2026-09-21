@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from jevcraft.models import Observation
+from minglecraft.models import Observation
 
 
 class MatchLogger:

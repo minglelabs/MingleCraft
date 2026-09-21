@@ -60,7 +60,7 @@ class Bridge final : public AIModule {
         }
       }
       if (u->getType().isWorker() && !u->isConstructing()) {
-        for (auto patch : patches) if (u->canGather(patch)) gathers.push_back(patch->getID());
+        for (auto patch : patches) gathers.push_back(patch->getID());
         for (auto g : Broodwar->getAllUnits()) {
           if (g->exists() && g->getType().isRefinery() && g->getPlayer() == self && g->isCompleted() && u->canGather(g)) {
             gathers.push_back(g->getID());
@@ -205,7 +205,7 @@ public:
     auto enemy = Broodwar->enemy();
     if (Broodwar->isReplay() || !self || !enemy || Broodwar->enemies().size() != 1 ||
         Broodwar->isFlagEnabled(Flag::CompleteMapInformation)) {
-      Broodwar->printf("JevCraft requires a non-cheating 1v1 game.");
+      Broodwar->printf("MingleCraft requires a non-cheating 1v1 game.");
       return;
     }
     auto now = std::chrono::system_clock::now().time_since_epoch();
@@ -217,7 +217,7 @@ public:
     // About 24 frames/second wall time. Do not run an unbounded fast game with a remote model.
     Broodwar->setLocalSpeed(42);
     active = true;
-    Broodwar->printf("JevCraft bridge ready; start the Python service on port 8765.");
+    Broodwar->printf("MingleCraft bridge ready; start the Python service on port 8765.");
   }
 
   void onFrame() override {
@@ -228,7 +228,7 @@ public:
       if (pending.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) return;
       try { apply(pending.get()); }
       catch (...) {
-        Broodwar->printf("JevCraft request failed; keeping existing orders and retrying in 2 seconds.");
+        Broodwar->printf("MingleCraft request failed; keeping existing orders and retrying in 2 seconds.");
         retryFrame = frame + 48;
       }
     }

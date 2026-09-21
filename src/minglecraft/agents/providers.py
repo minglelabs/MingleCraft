@@ -4,8 +4,8 @@ from typing import Protocol
 
 import httpx
 
-from jevcraft.agents.encoding import compact_request_payload
-from jevcraft.models import ChoiceAnswer, DecisionRequest, ProviderResult
+from minglecraft.agents.encoding import compact_request_payload
+from minglecraft.models import ChoiceAnswer, DecisionRequest, ProviderResult
 
 
 class DecisionProvider(Protocol):
@@ -74,7 +74,7 @@ class JevProvider:
         if response.is_error:
             detail = response.text[:800].replace(self.api_key, "[REDACTED]")
             print(
-                f"JevCraft provider response {response.status_code}: {detail}",
+                f"MingleCraft provider response {response.status_code}: {detail}",
                 flush=True,
             )
         response.raise_for_status()

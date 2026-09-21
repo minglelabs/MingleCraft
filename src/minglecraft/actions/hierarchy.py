@@ -1,7 +1,7 @@
 import math
 
-from jevcraft.models import Action, ChoiceQuestion, DecisionRequest, ProviderResult
-from jevcraft.strategy.policy import POLICY_INSTRUCTIONS
+from minglecraft.models import Action, ChoiceQuestion, DecisionRequest, ProviderResult
+from minglecraft.strategy.policy import POLICY_INSTRUCTIONS
 
 
 class ChoiceTree:

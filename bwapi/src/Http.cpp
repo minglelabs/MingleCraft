@@ -14,7 +14,7 @@ void require(bool success) { if (!success) throw std::runtime_error("bridge_tran
 }
 
 nlohmann::json postLocal(const wchar_t* path, const nlohmann::json& payload) {
-  Handle session(WinHttpOpen(L"JevCraft/0.1", WINHTTP_ACCESS_TYPE_NO_PROXY,
+  Handle session(WinHttpOpen(L"MingleCraft/0.1", WINHTTP_ACCESS_TYPE_NO_PROXY,
                             WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
   require(bool(session));
   // Remote Jev inference can take longer than one second, especially when

@@ -1,6 +1,6 @@
 from collections import Counter
 
-from jevcraft.models import Observation
+from minglecraft.models import Observation
 
 
 class StateBuilder:

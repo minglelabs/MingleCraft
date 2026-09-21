@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 
-from jevcraft.models import DecisionRequest
+from minglecraft.models import DecisionRequest
 
 
 def _columnar(items: list[dict], columns: list[str]) -> dict:

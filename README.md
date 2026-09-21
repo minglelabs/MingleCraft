@@ -1,8 +1,8 @@
-# JevCraft
+# MingleCraft
 
 **A model-agnostic real-time decision harness for StarCraft: Brood War.**
 
-JevCraft turns BWAPI observations into compact state and finite, legal action candidates. A interchangeable `DecisionProvider` selects an action; a native BWAPI module executes it. Jev is the primary integration, alongside rule-based, random, OpenAI and local-model providers.
+MingleCraft turns BWAPI observations into compact state and finite, legal action candidates. A interchangeable `DecisionProvider` selects an action; a native BWAPI module executes it. Jev is the primary integration, alongside rule-based, random, OpenAI and local-model providers.
 
 The first milestone asks **whether a decision model can operate an RTS in real time**, not whether it can beat strong StarCraft bots.
 
@@ -40,9 +40,9 @@ source .venv/bin/activate
 # Windows PowerShell instead:
 # .venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
-jevcraft demo --provider rule --steps 240
-jevcraft demo --provider random --seed 17 --steps 240
-jevcraft report runs
+minglecraft demo --provider rule --steps 240
+minglecraft demo --provider random --seed 17 --steps 240
+minglecraft report runs
 pytest -q
 ```
 
@@ -66,17 +66,17 @@ The `demo` command defaults to **rule** so it runs without credentials. The live
 ```bash
 # Recommended when you do not have a direct TypeSafe account:
 export OPENROUTER_API_KEY=your-key
-jevcraft serve --provider openrouter-jev --model '~typesafe/jev-latest' --deadline-ms 800
+minglecraft serve --provider openrouter-jev --model '~typesafe/jev-latest' --deadline-ms 800
 
 # Direct TypeSafe access is optional and requires its own account/key:
 export TYPESAFE_API_KEY=your-key
-jevcraft serve --provider jev --model jev-latest --deadline-ms 200
+minglecraft serve --provider jev --model jev-latest --deadline-ms 200
 
 # Select a model that supports Chat Completions structured outputs:
-jevcraft serve --provider openai --model YOUR_MODEL --deadline-ms 800
+minglecraft serve --provider openai --model YOUR_MODEL --deadline-ms 800
 
 # A local model server must already be running and support JSON schemas:
-jevcraft serve --provider local --model YOUR_MODEL --base-url http://127.0.0.1:8000/v1
+minglecraft serve --provider local --model YOUR_MODEL --base-url http://127.0.0.1:8000/v1
 ```
 
 The direct Jev adapter implements the [official TypeSafe HTTP contract](https://docs.typesafe.ai/api): `POST /v1/systemone`, structured `state`, `model`, and typed `questions`. The OpenRouter Jev adapter sends the same typed request to OpenRouter's Jev Decisions endpoint using `OPENROUTER_API_KEY` and the `~typesafe/jev-latest` model route. Each eligible Jev step sends a Noul `win_probability` request, records its result, then sends the Choice policy request with that fresh value and the current game state. Cumulative history remains local; remote payloads omit the archived strategy. Noul is used for the yes/no win forecast; Choice probabilities select among legal actions. Neither is an empirical calibration claim. See [Jev primitives](https://docs.typesafe.ai/primitives) and [the stage contract](docs/jev-policy.md).
@@ -88,7 +88,7 @@ All providers receive the same state and finite questions. Heuristic priorities 
 The native BWAPI 4.4.0 module runs inside **32-bit StarCraft: Brood War 1.16.1 on Windows**. A modern macOS StarCraft installation is not a substitute. See the [official BWAPI setup](https://github.com/bwapi/bwapi/tree/v4.4.0).
 
 1. Install your own licensed Brood War, patch 1.16.1, BWAPI 4.4.0 and Chaoslauncher. Install Visual Studio 2022 C++ desktop tools and CMake 3.24+.
-2. Download the official [BWAPI 4.4.0 SDK archive](https://github.com/bwapi/bwapi/releases/tag/v4.4.0) and extract it. `Release_Binary` must contain `include/` and `BWAPILIB/`. JevCraft builds the SDK library from those sources if `lib/BWAPI.lib` is absent.
+2. Download the official [BWAPI 4.4.0 SDK archive](https://github.com/bwapi/bwapi/releases/tag/v4.4.0) and extract it. `Release_Binary` must contain `include/` and `BWAPILIB/`. MingleCraft builds the SDK library from those sources if `lib/BWAPI.lib` is absent.
 3. Build **Release, Win32** from the repository root:
 
    ```powershell
@@ -96,8 +96,8 @@ The native BWAPI 4.4.0 module runs inside **32-bit StarCraft: Brood War 1.16.1 o
    cmake --build build/bwapi --config Release --parallel
    ```
 
-4. Copy `build/bwapi/Release/JevCraft.dll` into `StarCraft/bwapi-data/AI/`. Point the `[ai]` `ai` setting in `bwapi-data/bwapi.ini` to `bwapi-data/AI/JevCraft.dll`.
-5. Start the Python JevCraft service before the match. StarCraft and the BWAPI DLL must run natively on Windows; the Python service may run either in Windows Python or inside WSL2. The bridge uses `http://127.0.0.1:8765` and the service intentionally stays loopback-only.
+4. Copy `build/bwapi/Release/MingleCraft.dll` into `StarCraft/bwapi-data/AI/`. Point the `[ai]` `ai` setting in `bwapi-data/bwapi.ini` to `bwapi-data/AI/MingleCraft.dll`.
+5. Start the Python MingleCraft service before the match. StarCraft and the BWAPI DLL must run natively on Windows; the Python service may run either in Windows Python or inside WSL2. The bridge uses `http://127.0.0.1:8765` and the service intentionally stays loopback-only.
 
    **Simplest first live test: Windows Python**
 
@@ -106,7 +106,7 @@ The native BWAPI 4.4.0 module runs inside **32-bit StarCraft: Brood War 1.16.1 o
    .\.venv\Scripts\Activate.ps1
    python -m pip install -e ".[dev]"
    $env:OPENROUTER_API_KEY = "your-key"
-   jevcraft serve --provider openrouter-jev --model "~typesafe/jev-latest" --map "(2)Destination.scx"
+   minglecraft serve --provider openrouter-jev --model "~typesafe/jev-latest" --map "(2)Destination.scx"
    ```
 
    **WSL2 is also supported.** In the default WSL2 NAT mode, Windows normally forwards a WSL service to Windows `localhost`; keep WSL's `localhostForwarding=true` and run the same command inside WSL. If Windows cannot reach `http://127.0.0.1:8765/health`, use Windows 11 22H2+ mirrored networking (`networkingMode=mirrored` in `%USERPROFILE%\.wslconfig`) or run the service natively on Windows. Do not expose port 8765 to the LAN.
@@ -127,7 +127,7 @@ Pass `--input-price USD_PER_MILLION --output-price USD_PER_MILLION` to estimate 
 
 ## Remote testing from a Mac
 
-Keep the game, BWAPI DLL and Python service on the home Windows machine. From the company Mac, join the same private Tailscale network and connect to the Windows desktop. This avoids exposing the JevCraft HTTP port and keeps the existing `127.0.0.1:8765` bridge unchanged. See [remote testing](docs/remote-testing.md).
+Keep the game, BWAPI DLL and Python service on the home Windows machine. From the company Mac, join the same private Tailscale network and connect to the Windows desktop. This avoids exposing the MingleCraft HTTP port and keeps the existing `127.0.0.1:8765` bridge unchanged. See [remote testing](docs/remote-testing.md).
 
 ## Layout
 
@@ -151,6 +151,6 @@ Implement `DecisionProvider.decide(DecisionRequest) -> ProviderResult` to add an
 
 ## License
 
-JevCraft code is MIT licensed. BWAPI is a separate LGPL dependency; nlohmann/json is MIT licensed. See [third-party notices](THIRD_PARTY_NOTICES.md). StarCraft and Brood War are Blizzard trademarks. This project is not affiliated with Blizzard or TypeSafe.
+MingleCraft code is MIT licensed. BWAPI is a separate LGPL dependency; nlohmann/json is MIT licensed. See [third-party notices](THIRD_PARTY_NOTICES.md). StarCraft and Brood War are Blizzard trademarks. This project is not affiliated with Blizzard or TypeSafe.
 
 Provider research and integration caveats: [Realtime provider alternatives](docs/provider-alternatives.md).

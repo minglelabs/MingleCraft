@@ -1,8 +1,8 @@
 """Deterministic contract fixture, NOT a Brood War simulator or win-rate benchmark."""
 
-from jevcraft.actions.generator import ActionGenerator
-from jevcraft.models import DecisionEnvelope, Observation
-from jevcraft.strategy.scheduler import Scheduler
+from minglecraft.actions.generator import ActionGenerator
+from minglecraft.models import DecisionEnvelope, Observation
+from minglecraft.strategy.scheduler import Scheduler
 
 
 class SyntheticGame:
