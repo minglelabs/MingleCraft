@@ -45,12 +45,8 @@ class Bridge final : public AIModule {
       }
     }
     std::vector<std::pair<UnitType, TilePosition>> sites;
-    std::vector<UnitType> buildingTypes = {
-      UnitTypes::Terran_Supply_Depot, UnitTypes::Terran_Barracks,
-      UnitTypes::Protoss_Pylon, UnitTypes::Protoss_Gateway,
-      UnitTypes::Zerg_Spawning_Pool
-    };
-    for (auto type : buildingTypes) {
+    for (auto type : UnitTypes::allUnitTypes()) {
+      if (type.getRace() != self->getRace() || !type.isBuilding() || type.isSpecialBuilding()) continue;
       auto tile = Broodwar->getBuildLocation(type, homeTile, 24);
       if (tile.isValid()) sites.push_back({type, tile});
     }
@@ -58,11 +54,18 @@ class Bridge final : public AIModule {
       if (!u->exists() || !u->getPosition().isValid()) continue;
       json trains = json::array(), gathers = json::array(), builds = json::array();
       if (u->isCompleted() && !u->isTraining()) {
-        for (auto type : {UnitTypes::Terran_SCV, UnitTypes::Terran_Marine, UnitTypes::Protoss_Probe, UnitTypes::Protoss_Zealot, UnitTypes::Zerg_Drone, UnitTypes::Zerg_Zergling, UnitTypes::Zerg_Overlord})
+        for (auto type : UnitTypes::allUnitTypes()) {
+          if (type.getRace() != self->getRace()) continue;
           if (u->canTrain(type)) trains.push_back(type.getName());
+        }
       }
       if (u->getType().isWorker() && !u->isConstructing()) {
         for (auto patch : patches) if (u->canGather(patch)) gathers.push_back(patch->getID());
+        for (auto g : Broodwar->getAllUnits()) {
+          if (g->exists() && g->getType().isRefinery() && g->getPlayer() == self && g->isCompleted() && u->canGather(g)) {
+            gathers.push_back(g->getID());
+          }
+        }
         for (auto site : sites) if (u->canBuild(site.first, site.second))
           builds.push_back({{"unit_type", site.first.getName()}, {"tile", tilePosition(site.second)}});
       }
@@ -146,7 +149,7 @@ class Bridge final : public AIModule {
             action = UnitCommand::build(unit, tile, type);
           } else if (kind == "gather") {
             auto target = Broodwar->getUnit(command.at("target_id").get<int>());
-            valid = target && target->exists() && target->isVisible() && target->getType().isMineralField() &&
+            valid = target && target->exists() && target->isVisible() && (target->getType().isMineralField() || target->getType().isRefinery()) &&
                     !unit->isConstructing() && unit->canGather(target);
             if (valid) action = UnitCommand::gather(unit, target);
           } else if (kind == "attack" || kind == "move") {
@@ -154,6 +157,28 @@ class Bridge final : public AIModule {
             valid = target.isValid() && !unit->isConstructing() &&
                     (kind == "attack" ? unit->canAttack(target) : unit->canMove());
             action = kind == "attack" ? UnitCommand::attack(unit, target) : UnitCommand::move(unit, target);
+          } else if (kind == "repair") {
+            auto target = Broodwar->getUnit(command.at("target_id").get<int>());
+            valid = target && target->exists() && target->isVisible() && unit->canRepair(target);
+            if (valid) action = UnitCommand::repair(unit, target);
+          } else if (kind == "stop") {
+            valid = unit->canStop();
+            action = UnitCommand::stop(unit);
+          } else if (kind == "hold_position") {
+            valid = unit->canHoldPosition();
+            action = UnitCommand::holdPosition(unit);
+          } else if (kind == "siege") {
+            valid = unit->canSiege();
+            action = UnitCommand::siege(unit);
+          } else if (kind == "unsiege") {
+            valid = unit->canUnsiege();
+            action = UnitCommand::unsiege(unit);
+          } else if (kind == "cloak") {
+            valid = unit->canCloak();
+            action = UnitCommand::cloak(unit);
+          } else if (kind == "decloak") {
+            valid = unit->canDecloak();
+            action = UnitCommand::decloak(unit);
           }
           if (!valid || !unit->canIssueCommand(action)) { receipt["reason"] = "revalidation_failed"; continue; }
           // Deduplicate continuous orders, but permit another completed training cycle.

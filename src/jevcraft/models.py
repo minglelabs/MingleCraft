@@ -117,7 +117,7 @@ class Observation(Model):
 
 
 class Command(Model):
-    kind: Literal["train", "build", "gather", "attack", "move"]
+    kind: str
     unit_ids: tuple[int, ...] = Field(min_length=1, max_length=200)
     unit_type: str | None = None
     target_id: int | None = None
