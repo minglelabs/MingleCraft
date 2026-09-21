@@ -181,12 +181,25 @@ class AgentLoop:
         region = parse_region_key(await ask(build_region_question(actor, command.kind, spec)))
         bounds = spec.region_bounds(*region)
         level = 1
+
+        # Budget reserve: estimate remaining latency per step to stop refinement
+        # early before the deadline expires, preventing a fallback to wait / actions[0].
+        latencies = [c["latency_ms"] for c in calls if c.get("latency_ms", 0) > 0]
+        typical_latency_sec = (sum(latencies) / len(latencies) / 1000.0) if latencies else 0.05
+        safety_margin_sec = max(0.015, typical_latency_sec * 1.25)
+
         while max(bounds[2] - bounds[0], bounds[3] - bounds[1]) > spec.precision_px:
+            if deadline - time.monotonic() < safety_margin_sec:
+                break
             x, y = parse_refinement_key(
                 await ask(build_refinement_question(actor, command.kind, bounds, level))
             )
             bounds = child_bounds(bounds, x, y)
             level += 1
+            if calls and calls[-1].get("latency_ms", 0) > 0:
+                latencies.append(calls[-1]["latency_ms"])
+                typical_latency_sec = sum(latencies) / len(latencies) / 1000.0
+                safety_margin_sec = max(0.015, typical_latency_sec * 1.25)
         position = {
             "x": min(spec.map_width - 1, (bounds[0] + bounds[2] - 1) // 2),
             "y": min(spec.map_height - 1, (bounds[1] + bounds[3] - 1) // 2),

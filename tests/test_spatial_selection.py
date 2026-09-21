@@ -245,3 +245,46 @@ def test_agent_loop_resolves_group_spatial_action_end_to_end(tmp_path):
     assert len(decision.commands[0].unit_ids) > 1
     assert decision.commands[0].kind == "attack"
     assert decision.commands[0].position.model_dump() == {"x": 3803, "y": 3363}
+
+
+def test_spatial_decision_loop_budget_reserve_early_stop(tmp_path):
+    class TimedSpatialProvider(SpatialProvider):
+        def __init__(self):
+            super().__init__()
+            self.spatial_calls = 0
+
+        async def decide(self, request):
+            self.requests.append(request)
+            if "action" in request.questions:
+                action = next(
+                    key
+                    for key in request.questions["action"].criteria
+                    if key.startswith("spatial_move_unit_")
+                )
+                return ProviderResult(
+                    model=self.model, answers={"action": ChoiceAnswer(choice=action)}
+                )
+            self.spatial_calls += 1
+            await asyncio.sleep(0.02)
+            key = (
+                "region_7_6"
+                if "region_7_6" in request.questions["spatial"].criteria
+                else "refine_3_4"
+            )
+            return ProviderResult(model=self.model, answers={"spatial": ChoiceAnswer(choice=key)})
+
+    provider = TimedSpatialProvider()
+    # 55ms deadline:
+    # 1. Action takes ~0ms
+    # 2. Region takes ~20ms. safety_margin ~ 25ms.
+    # 3. Refinement 1 takes ~20ms. Total elapsed ~40ms, remaining ~15ms < 25ms.
+    # Refinement 2 stops early within deadline, returning resolved valid coordinates instead of deadline fallback!
+    loop = AgentLoop(provider, tmp_path, single_stage=True, deadline_ms=55)
+    decision = asyncio.run(loop.step(SyntheticGame("spatial_budget").observe()))
+
+    assert decision.action_id.startswith("spatial_move_unit_")
+    assert decision.fallback_reason is None
+    assert decision.commands[0].position is not None
+    assert provider.spatial_calls == 2
+    assert 0 <= decision.commands[0].position.x <= 4096
+    assert 0 <= decision.commands[0].position.y <= 4096
