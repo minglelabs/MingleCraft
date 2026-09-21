@@ -316,43 +316,6 @@ class ActionGenerator:
                             ),
                         )
                     )
-                for target_id in worker.can_gather:
-                    if target_id in minerals:
-                        mineral = minerals[target_id]
-                        add(
-                            Action(
-                                id=f"gather_{worker.id}_{mineral.id}",
-                                category="economy",
-                                group="workers",
-                                label=f"Send {'idle ' if worker.idle else ''}SCV {worker.id} to visible mineral patch {mineral.id}",
-                                priority=100 if worker.idle else 0,
-                                commands=(
-                                    Command(
-                                        kind="gather",
-                                        unit_ids=(worker.id,),
-                                        target_id=mineral.id,
-                                    ),
-                                ),
-                            )
-                        )
-                    elif target_id in refineries:
-                        refinery = refineries[target_id]
-                        add(
-                            Action(
-                                id=f"gather_gas_{worker.id}_{refinery.id}",
-                                category="economy",
-                                group="workers",
-                                label=f"Send {'idle ' if worker.idle else ''}SCV {worker.id} to {refinery.type} {refinery.id}",
-                                priority=100 if worker.idle else 0,
-                                commands=(
-                                    Command(
-                                        kind="gather",
-                                        unit_ids=(worker.id,),
-                                        target_id=refinery.id,
-                                    ),
-                                ),
-                            )
-                        )
 
         if "construction" in due:
             for worker in workers:
@@ -377,16 +340,22 @@ class ActionGenerator:
                         )
                     )
 
-        visible_targets = [
-            (f"visible_{enemy.id}", enemy.position) for enemy in obs.enemies if enemy.visible
+        visible_enemy_targets = [
+            (f"visible_{enemy.id}", enemy.position, enemy.id)
+            for enemy in obs.enemies
+            if enemy.visible
         ]
         start_targets = [
             (location.id, location.position)
             for location in obs.locations
             if location.kind == "start"
         ]
-        move_targets = [*visible_targets, *start_targets, ("home", obs.home)]
-        attack_targets = [*visible_targets, *start_targets, ("home", obs.home)]
+        move_targets = [
+            *[(label, pos) for label, pos, _ in visible_enemy_targets],
+            *start_targets,
+            ("home", obs.home),
+        ]
+        ground_attack_targets = [*start_targets, ("home", obs.home)]
 
         if "scout" in due:
             for scout in workers:
@@ -425,7 +394,24 @@ class ActionGenerator:
                         )
                     )
                 if "attack" in due and unit.can_attack:
-                    for target, position in attack_targets:
+                    for target, position, enemy_id in visible_enemy_targets:
+                        add(
+                            Action(
+                                id=f"attack_unit_{unit.id}_{target}",
+                                category="attack",
+                                group=f"unit_{unit.id}",
+                                label=f"Attack {target} with {unit.type} {unit.id}",
+                                commands=(
+                                    Command(
+                                        kind="attack",
+                                        unit_ids=(unit.id,),
+                                        target_id=enemy_id,
+                                        position=position,
+                                    ),
+                                ),
+                            )
+                        )
+                    for target, position in ground_attack_targets:
                         add(
                             Action(
                                 id=f"attack_unit_{unit.id}_{target}",
@@ -493,28 +479,34 @@ class ActionGenerator:
                             commands=(Command(kind="hold_position", unit_ids=(unit.id,)),),
                         )
                     )
-                if "Tank" in unit.type:
-                    if "Siege Mode" in unit.type:
-                        add(
-                            Action(
-                                id=f"unsiege_{unit.id}",
-                                category="defense",
-                                group=f"unit_{unit.id}",
-                                label=f"Unsiege Tank {unit.id}",
-                                commands=(Command(kind="unsiege", unit_ids=(unit.id,)),),
-                            )
+                can_unsiege = unit.can_unsiege or (
+                    "Tank" in unit.type and "Siege Mode" in unit.type
+                )
+                if can_unsiege:
+                    add(
+                        Action(
+                            id=f"unsiege_{unit.id}",
+                            category="defense",
+                            group=f"unit_{unit.id}",
+                            label=f"Unsiege Tank {unit.id}",
+                            commands=(Command(kind="unsiege", unit_ids=(unit.id,)),),
                         )
-                    else:
-                        add(
-                            Action(
-                                id=f"siege_{unit.id}",
-                                category="defense",
-                                group=f"unit_{unit.id}",
-                                label=f"Siege Tank {unit.id}",
-                                commands=(Command(kind="siege", unit_ids=(unit.id,)),),
-                            )
+                    )
+                can_siege = unit.can_siege or (
+                    "Tank" in unit.type and "Siege Mode" not in unit.type
+                )
+                if can_siege:
+                    add(
+                        Action(
+                            id=f"siege_{unit.id}",
+                            category="defense",
+                            group=f"unit_{unit.id}",
+                            label=f"Siege Tank {unit.id}",
+                            commands=(Command(kind="siege", unit_ids=(unit.id,)),),
                         )
-                if "Wraith" in unit.type or "Ghost" in unit.type:
+                    )
+                can_cloak = unit.can_cloak or ("Wraith" in unit.type or "Ghost" in unit.type)
+                if can_cloak:
                     add(
                         Action(
                             id=f"cloak_{unit.id}",
@@ -524,6 +516,8 @@ class ActionGenerator:
                             commands=(Command(kind="cloak", unit_ids=(unit.id,)),),
                         )
                     )
+                can_decloak = unit.can_decloak or ("Wraith" in unit.type or "Ghost" in unit.type)
+                if can_decloak:
                     add(
                         Action(
                             id=f"decloak_{unit.id}",
@@ -531,6 +525,39 @@ class ActionGenerator:
                             group=f"unit_{unit.id}",
                             label=f"Decloak {unit.type} {unit.id}",
                             commands=(Command(kind="decloak", unit_ids=(unit.id,)),),
+                        )
+                    )
+                if unit.can_stim:
+                    add(
+                        Action(
+                            id=f"stim_{unit.id}",
+                            category="defense",
+                            group=f"unit_{unit.id}",
+                            label=f"Stim {unit.type} {unit.id}",
+                            commands=(Command(kind="stim", unit_ids=(unit.id,)),),
+                        )
+                    )
+                if unit.can_patrol:
+                    for target, position in move_targets:
+                        add(
+                            Action(
+                                id=f"patrol_{unit.id}_{target}",
+                                category="defense",
+                                group=f"unit_{unit.id}",
+                                label=f"Patrol {unit.type} {unit.id} to {target}",
+                                commands=(
+                                    Command(kind="patrol", unit_ids=(unit.id,), position=position),
+                                ),
+                            )
+                        )
+                if unit.can_return_cargo:
+                    add(
+                        Action(
+                            id=f"return_cargo_{unit.id}",
+                            category="economy",
+                            group=f"unit_{unit.id}",
+                            label=f"Return cargo with {unit.type} {unit.id}",
+                            commands=(Command(kind="return_cargo", unit_ids=(unit.id,)),),
                         )
                     )
                 if _is_worker(unit):
@@ -552,15 +579,22 @@ class ActionGenerator:
                                 )
                             )
 
-        # Group actions by unit type and all combat units
-        combat_groups: dict[str, list[int]] = {}
+        # Group actions by unit type, all combat units, and worker groups
+        groups: dict[str, list[int]] = {}
         for u in combat_units:
-            clean_type = u.type.replace("Terran ", "").replace(" ", "_").lower()
-            combat_groups.setdefault(f"all_{clean_type}s", []).append(u.id)
+            clean_type = (
+                u.type.replace("Terran_", "").replace("Terran ", "").replace(" ", "_").lower()
+            )
+            groups.setdefault(f"all_{clean_type}s", []).append(u.id)
         if len(combat_units) >= 2:
-            combat_groups["all_combat"] = [u.id for u in combat_units]
+            groups["all_combat"] = [u.id for u in combat_units]
 
-        for group_name, group_unit_ids in combat_groups.items():
+        worker_units = [w for w in workers if w.can_move]
+        if len(worker_units) >= 2:
+            groups["all_scvs"] = [w.id for w in worker_units]
+            groups["all_workers"] = [w.id for w in worker_units]
+
+        for group_name, group_unit_ids in groups.items():
             if len(group_unit_ids) < 2:
                 continue
             u_ids = tuple(group_unit_ids[:200])
@@ -603,7 +637,24 @@ class ActionGenerator:
                     )
                 )
                 if "attack" in due:
-                    for target, position in attack_targets:
+                    for target, position, enemy_id in visible_enemy_targets:
+                        add(
+                            Action(
+                                id=f"attack_group_{group_name}_{target}",
+                                category="attack",
+                                group=group_name,
+                                label=f"Attack {target} with {group_label} ({len(u_ids)} units)",
+                                commands=(
+                                    Command(
+                                        kind="attack",
+                                        unit_ids=u_ids,
+                                        target_id=enemy_id,
+                                        position=position,
+                                    ),
+                                ),
+                            )
+                        )
+                    for target, position in ground_attack_targets:
                         add(
                             Action(
                                 id=f"attack_group_{group_name}_{target}",

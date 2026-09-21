@@ -245,3 +245,150 @@ def test_gas_gathering_and_special_abilities_and_groups():
     assert "decloak_5" in ids
     assert "spatial_attack_group_all_marines" in ids
     assert "spatial_attack_group_all_combat" in ids
+
+
+def test_exhaustive_target_attacks_groups_and_capabilities(observation):
+    # Test worker groups, capability flags, and visible enemy target_id commands
+    workers = (
+        Unit(
+            id=10,
+            type="Terran_SCV",
+            position=observation.home,
+            hit_points=60,
+            can_move=True,
+            can_gather=(100,),
+            can_patrol=True,
+            can_return_cargo=True,
+        ),
+        Unit(
+            id=11,
+            type="Terran_SCV",
+            position=observation.home,
+            hit_points=60,
+            can_move=True,
+            can_gather=(100,),
+        ),
+    )
+    combat = (
+        Unit(
+            id=20,
+            type="Terran_Marine",
+            position=observation.home,
+            hit_points=40,
+            can_move=True,
+            can_attack=True,
+            can_stim=True,
+        ),
+        Unit(
+            id=21,
+            type="Terran_Marine",
+            position=observation.home,
+            hit_points=40,
+            can_move=True,
+            can_attack=True,
+        ),
+        Unit(
+            id=30,
+            type="Terran_Siege_Tank_Tank_Mode",
+            position=observation.home,
+            hit_points=150,
+            can_move=True,
+            can_attack=True,
+            can_siege=True,
+        ),
+        Unit(
+            id=31,
+            type="Terran_Siege_Tank_Siege_Mode",
+            position=observation.home,
+            hit_points=150,
+            can_attack=True,
+            can_unsiege=True,
+        ),
+        Unit(
+            id=40,
+            type="Terran_Wraith",
+            position=observation.home,
+            hit_points=120,
+            can_move=True,
+            can_attack=True,
+            can_cloak=True,
+        ),
+        Unit(
+            id=41,
+            type="Terran_Wraith",
+            position=observation.home,
+            hit_points=120,
+            can_move=True,
+            can_attack=True,
+            can_decloak=True,
+        ),
+    )
+    enemy = Enemy(
+        id=777,
+        type="Protoss_Zealot",
+        position=Position(x=1500, y=1500),
+        hit_points=160,
+        visible=True,
+    )
+    obs = observation.model_copy(
+        update={
+            "units": (*workers, *combat),
+            "enemies": (enemy,),
+        }
+    )
+    actions = ActionGenerator().generate(
+        obs,
+        {"economy", "attack", "defense"},
+        exhaustive=True,
+    )
+    actions_by_id = {a.id: a for a in actions}
+
+    # 1. Target attack on visible enemy has target_id
+    marine_attack = actions_by_id.get("attack_unit_20_visible_777")
+    assert marine_attack is not None
+    cmd = marine_attack.commands[0]
+    assert cmd.kind == "attack"
+    assert cmd.unit_ids == (20,)
+    assert cmd.target_id == 777
+    assert cmd.position == Position(x=1500, y=1500)
+
+    # 2. Group target attack on visible enemy has target_id
+    group_attack = actions_by_id.get("attack_group_all_marines_visible_777")
+    assert group_attack is not None
+    g_cmd = group_attack.commands[0]
+    assert g_cmd.kind == "attack"
+    assert set(g_cmd.unit_ids) == {20, 21}
+    assert g_cmd.target_id == 777
+    assert g_cmd.position == Position(x=1500, y=1500)
+
+    # 3. Worker groups all_scvs and all_workers exist
+    assert "spatial_attack_group_all_scvs" in actions_by_id
+    assert "spatial_move_group_all_scvs" in actions_by_id
+    assert "spatial_attack_group_all_workers" in actions_by_id
+    assert "spatial_move_group_all_workers" in actions_by_id
+    assert "attack_group_all_scvs_visible_777" in actions_by_id
+    scv_cmd = actions_by_id["attack_group_all_scvs_visible_777"].commands[0]
+    assert set(scv_cmd.unit_ids) == {10, 11}
+    assert scv_cmd.target_id == 777
+
+    # 4. Capability-based actions
+    assert "stim_20" in actions_by_id
+    assert actions_by_id["stim_20"].commands[0].kind == "stim"
+
+    assert "patrol_10_home" in actions_by_id
+    assert actions_by_id["patrol_10_home"].commands[0].kind == "patrol"
+
+    assert "return_cargo_10" in actions_by_id
+    assert actions_by_id["return_cargo_10"].commands[0].kind == "return_cargo"
+
+    assert "siege_30" in actions_by_id
+    assert actions_by_id["siege_30"].commands[0].kind == "siege"
+
+    assert "unsiege_31" in actions_by_id
+    assert actions_by_id["unsiege_31"].commands[0].kind == "unsiege"
+
+    assert "cloak_40" in actions_by_id
+    assert actions_by_id["cloak_40"].commands[0].kind == "cloak"
+
+    assert "decloak_41" in actions_by_id
+    assert actions_by_id["decloak_41"].commands[0].kind == "decloak"

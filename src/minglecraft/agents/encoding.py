@@ -60,6 +60,13 @@ def _units(units: list[dict]) -> dict:
         "can_train",
         "can_gather",
         "build_sites",
+        "can_siege",
+        "can_unsiege",
+        "can_cloak",
+        "can_decloak",
+        "can_stim",
+        "can_patrol",
+        "can_return_cargo",
     ]
     rows = []
     for unit in units:
@@ -78,6 +85,13 @@ def _units(units: list[dict]) -> dict:
                 unit["can_train"],
                 unit["can_gather"],
                 [[site["unit_type"], _position(site["tile"])] for site in unit["build_sites"]],
+                unit.get("can_siege", False),
+                unit.get("can_unsiege", False),
+                unit.get("can_cloak", False),
+                unit.get("can_decloak", False),
+                unit.get("can_stim", False),
+                unit.get("can_patrol", False),
+                unit.get("can_return_cargo", False),
             ]
         )
     return {"columns": columns, "rows": rows}

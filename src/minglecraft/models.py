@@ -40,6 +40,13 @@ class Unit(Model):
     can_train: tuple[TrainType, ...] = ()
     can_gather: tuple[int, ...] = ()
     build_sites: tuple[BuildSite, ...] = ()
+    can_siege: bool = False
+    can_unsiege: bool = False
+    can_cloak: bool = False
+    can_decloak: bool = False
+    can_stim: bool = False
+    can_patrol: bool = False
+    can_return_cargo: bool = False
 
 
 class Enemy(Model):
