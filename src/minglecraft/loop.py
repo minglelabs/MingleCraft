@@ -196,9 +196,14 @@ class AgentLoop:
         while max(bounds[2] - bounds[0], bounds[3] - bounds[1]) > spec.precision_px:
             if deadline - time.monotonic() < safety_margin_sec:
                 break
-            x, y = parse_refinement_key(
-                await ask(build_refinement_question(actor, command.kind, bounds, level))
-            )
+            try:
+                x, y = parse_refinement_key(
+                    await ask(build_refinement_question(actor, command.kind, bounds, level))
+                )
+            except asyncio.TimeoutError:
+                # A completed parent region is already a valid ground target. Keep
+                # that resolution when the next refinement cannot fit the budget.
+                break
             bounds = child_bounds(bounds, x, y)
             level += 1
             if calls and calls[-1].get("latency_ms", 0) > 0:
