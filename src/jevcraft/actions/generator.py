@@ -382,6 +382,43 @@ class ActionGenerator:
                                 ),
                             )
                         )
+                if unit.can_move:
+                    add(
+                        Action(
+                            id=f"stop_{unit.id}",
+                            category="defense",
+                            group=f"unit_{unit.id}",
+                            label=f"Stop {unit.type} {unit.id}",
+                            commands=(
+                                Command(kind="stop", unit_ids=(unit.id,)),
+                            ),
+                        )
+                    )
+                    add(
+                        Action(
+                            id=f"hold_{unit.id}",
+                            category="defense",
+                            group=f"unit_{unit.id}",
+                            label=f"Hold position with {unit.type} {unit.id}",
+                            commands=(
+                                Command(kind="hold_position", unit_ids=(unit.id,)),
+                            ),
+                        )
+                    )
+                if _is_worker(unit):
+                    for target_u in units:
+                        if target_u.id != unit.id and target_u.hit_points < 1000:
+                            add(
+                                Action(
+                                    id=f"repair_{unit.id}_{target_u.id}",
+                                    category="defense",
+                                    group=f"unit_{unit.id}",
+                                    label=f"Repair {target_u.type} {target_u.id} with SCV {unit.id}",
+                                    commands=(
+                                        Command(kind="repair", unit_ids=(unit.id,), target_id=target_u.id),
+                                    ),
+                                )
+                            )
 
         combat_army = [unit for unit in units if unit.completed and not unit.constructing and not _is_worker(unit) and (unit.can_attack or unit.can_move)]
         squads = {
