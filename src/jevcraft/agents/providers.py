@@ -54,24 +54,31 @@ class JevProvider:
         if not api_key:
             raise ValueError("Set TYPESAFE_API_KEY before using the Jev provider")
         self.api_key, self.model, self.transport = api_key, model, transport
+        self._client = None
+
+    def _get_client(self) -> httpx.Client:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.Client(timeout=5, transport=self.transport)
+        return self._client
 
     async def decide(self, request: DecisionRequest) -> ProviderResult:
-        # The bridge creates a fresh event loop per HTTP step, so do not retain
-        # an AsyncClient across steps. Both stage calls have explicit deadlines.
-        async with httpx.AsyncClient(timeout=5, transport=self.transport) as client:
-            response = await client.post(
-                self.endpoint,
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                json=compact_request_payload(request, self.model),
+        import asyncio
+
+        client = self._get_client()
+        response = await asyncio.to_thread(
+            client.post,
+            self.endpoint,
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            json=compact_request_payload(request, self.model),
+        )
+        if response.is_error:
+            detail = response.text[:800].replace(self.api_key, "[REDACTED]")
+            print(
+                f"JevCraft provider response {response.status_code}: {detail}",
+                flush=True,
             )
-            if response.is_error:
-                detail = response.text[:800].replace(self.api_key, "[REDACTED]")
-                print(
-                    f"JevCraft provider response {response.status_code}: {detail}",
-                    flush=True,
-                )
-            response.raise_for_status()
-            data = response.json()
+        response.raise_for_status()
+        data = response.json()
         result = ProviderResult.model_validate(
             {
                 "model": data.get("model", self.model),
