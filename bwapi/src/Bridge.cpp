@@ -22,6 +22,12 @@ class Bridge final : public AIModule {
     }
     return UnitTypes::Unknown;
   }
+  static TechType findTechType(const std::string& name) {
+    for (auto tech : TechTypes::allTechTypes()) {
+      if (tech.getName() == name) return tech;
+    }
+    return TechTypes::None;
+  }
   std::string match;
   bool active = false;
   int lastSent = -6;
@@ -153,11 +159,28 @@ class Bridge final : public AIModule {
             valid = target && target->exists() && target->isVisible() && (target->getType().isMineralField() || target->getType().isRefinery()) &&
                     !unit->isConstructing() && unit->canGather(target);
             if (valid) action = UnitCommand::gather(unit, target);
-          } else if (kind == "attack" || kind == "move") {
+          } else if (kind == "attack") {
+            if (command.contains("target_id") && !command.at("target_id").is_null()) {
+              auto target = Broodwar->getUnit(command.at("target_id").get<int>());
+              valid = target && target->exists() && target->isVisible() && target->getPlayer()->isEnemy(Broodwar->self()) &&
+                      !unit->isConstructing() && unit->canAttack(target);
+              if (valid) action = UnitCommand::attack(unit, target);
+            } else if (command.contains("position") && !command.at("position").is_null()) {
+              Position target(command.at("position").at("x").get<int>(), command.at("position").at("y").get<int>());
+              valid = target.isValid() && !unit->isConstructing() && unit->canAttack(target);
+              if (valid) action = UnitCommand::attack(unit, target);
+            }
+          } else if (kind == "move") {
             Position target(command.at("position").at("x").get<int>(), command.at("position").at("y").get<int>());
-            valid = target.isValid() && !unit->isConstructing() &&
-                    (kind == "attack" ? unit->canAttack(target) : unit->canMove());
-            action = kind == "attack" ? UnitCommand::attack(unit, target) : UnitCommand::move(unit, target);
+            valid = target.isValid() && !unit->isConstructing() && unit->canMove();
+            action = UnitCommand::move(unit, target);
+          } else if (kind == "patrol") {
+            Position target(command.at("position").at("x").get<int>(), command.at("position").at("y").get<int>());
+            valid = target.isValid() && !unit->isConstructing() && unit->canPatrol();
+            action = UnitCommand::patrol(unit, target);
+          } else if (kind == "return_cargo") {
+            valid = !unit->isConstructing() && unit->canReturnCargo();
+            action = UnitCommand::returnCargo(unit);
           } else if (kind == "repair") {
             auto target = Broodwar->getUnit(command.at("target_id").get<int>());
             valid = target && target->exists() && target->isVisible() && unit->canRepair(target);
@@ -180,6 +203,57 @@ class Bridge final : public AIModule {
           } else if (kind == "decloak") {
             valid = unit->canDecloak();
             action = UnitCommand::decloak(unit);
+          } else if (kind == "burrow") {
+            valid = unit->canBurrow();
+            action = UnitCommand::burrow(unit);
+          } else if (kind == "unburrow") {
+            valid = unit->canUnburrow();
+            action = UnitCommand::unburrow(unit);
+          } else if (kind == "lift") {
+            valid = unit->canLift();
+            action = UnitCommand::lift(unit);
+          } else if (kind == "land") {
+            TilePosition tile(command.at("tile").at("x").get<int>(), command.at("tile").at("y").get<int>());
+            valid = tile.isValid() && unit->canLand(tile);
+            action = UnitCommand::land(unit, tile);
+          } else if (kind == "load") {
+            auto target = Broodwar->getUnit(command.at("target_id").get<int>());
+            valid = target && target->exists() && target->isVisible() && unit->canLoad(target);
+            if (valid) action = UnitCommand::load(unit, target);
+          } else if (kind == "unload") {
+            auto target = Broodwar->getUnit(command.at("target_id").get<int>());
+            valid = target && target->exists() && unit->canUnload(target);
+            if (valid) action = UnitCommand::unload(unit, target);
+          } else if (kind == "unload_all") {
+            if (command.contains("position") && !command.at("position").is_null()) {
+              Position target(command.at("position").at("x").get<int>(), command.at("position").at("y").get<int>());
+              valid = target.isValid() && unit->canUnloadAllPosition(target);
+              if (valid) action = UnitCommand::unloadAll(unit, target);
+            } else {
+              valid = unit->canUnloadAll();
+              action = UnitCommand::unloadAll(unit);
+            }
+          } else if (kind == "use_tech") {
+            const auto techName = command.at("tech").get<std::string>();
+            auto tech = findTechType(techName);
+            if (tech != TechTypes::None && tech != TechTypes::Unknown) {
+              if (command.contains("target_id") && !command.at("target_id").is_null()) {
+                auto target = Broodwar->getUnit(command.at("target_id").get<int>());
+                valid = target && target->exists() && target->isVisible() && unit->canUseTech(tech, target);
+                if (valid) action = UnitCommand::useTech(unit, tech, target);
+              } else if (command.contains("position") && !command.at("position").is_null()) {
+                Position target(command.at("position").at("x").get<int>(), command.at("position").at("y").get<int>());
+                valid = target.isValid() && unit->canUseTech(tech, target);
+                if (valid) action = UnitCommand::useTech(unit, tech, target);
+              } else {
+                valid = unit->canUseTech(tech);
+                action = UnitCommand::useTech(unit, tech);
+              }
+            }
+          } else if (kind == "stim") {
+            auto tech = TechTypes::Stim_Packs;
+            valid = unit->canUseTech(tech);
+            action = UnitCommand::useTech(unit, tech);
           }
           if (!valid || !unit->canIssueCommand(action)) { receipt["reason"] = "revalidation_failed"; continue; }
           // Deduplicate continuous orders, but permit another completed training cycle.

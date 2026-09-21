@@ -41,7 +41,7 @@ A successful response contains:
 }
 ```
 
-Supported commands: `train`, `build`, `gather`, `attack` (attack-move), `move`, `repair`, `stop`, `hold_position`, `siege`, `unsiege`, `cloak`, `decloak`. A `wait` has no commands. One macro action may apply to multiple units, but a response contains at most one command object in v1. The action generator, not the provider, owns command arguments.
+Supported commands: `train`, `build`, `gather`, `attack` (unit target or attack-move position), `move`, `patrol`, `return_cargo`, `repair`, `stop`, `hold_position`, `siege`, `unsiege`, `cloak`, `decloak`, `burrow`, `unburrow`, `lift`, `land`, `load`, `unload`, `unload_all`, `use_tech`, `stim`. A `wait` has no commands. One macro action may apply to multiple units, but a response contains at most one command object in v1. The action generator, not the provider, owns command arguments.
 
 Before executing on the game thread, the native module checks match ID, observed frame, expiry, monotonicity, owned/live/completed units, permitted unit types, current BWAPI legality and duplicate continuous orders. Commands may partially succeed if members of a squad disappear. Receipts retain attempted/accepted/effective unit-command counts and a reason; the reason describes the last encountered rejection/suppression and is not an atomic squad transaction.
 
