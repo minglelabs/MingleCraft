@@ -4,6 +4,8 @@
   "frame": 0,
   "map_name": "synthetic-contract-fixture",
   "map_hash": "synthetic-v1",
+  "map_width": 4096,
+  "map_height": 4096,
   "self_race": "Terran",
   "enemy_race": "Terran",
   "complete_map_information": false,

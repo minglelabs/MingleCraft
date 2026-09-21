@@ -88,6 +88,8 @@ class SyntheticGame:
                 "frame": self.frame,
                 "map_name": "synthetic-contract-fixture",
                 "map_hash": "synthetic-v1",
+                "map_width": 4096,
+                "map_height": 4096,
                 "minerals": self.minerals,
                 "gas": 0,
                 "supply_used": self.supply_used,

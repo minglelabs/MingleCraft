@@ -1,5 +1,6 @@
 import asyncio
 import json
+import math
 import time
 from pathlib import Path
 
@@ -10,22 +11,43 @@ from jevcraft.actions.executor import envelope
 from jevcraft.actions.generator import ActionGenerator
 from jevcraft.actions.hierarchy import ChoiceTree
 from jevcraft.actions.pruner import prune
+from jevcraft.actions.spatial import (
+    build_refinement_question,
+    build_region_question,
+    child_bounds,
+    get_spatial_grid_spec,
+    parse_refinement_key,
+    parse_region_key,
+)
 from jevcraft.agents.encoding import compact_request_payload
 from jevcraft.agents.providers import DecisionProvider
 from jevcraft.evaluation.logger import MatchLogger
-from jevcraft.models import DecisionRequest, NoulQuestion, Observation, ProviderResult
+from jevcraft.models import (
+    ChoiceQuestion,
+    DecisionRequest,
+    NoulQuestion,
+    Observation,
+    Position,
+    ProviderResult,
+)
 from jevcraft.state import StateBuilder
 from jevcraft.state.history import MatchHistory
 from jevcraft.strategy.policy import POLICY_INSTRUCTIONS, SHARED_POLICY
 from jevcraft.strategy.scheduler import Scheduler
 
 LIVE_VALUE_INSTRUCTIONS = "Estimate the chance of ultimately winning from the supplied game state. Return only the requested Noul probability."
-LIVE_POLICY_INSTRUCTIONS = (
-    "You are playing StarCraft: Brood War v1.16.1 via BWAPI v4.4.0 (injected by Chaoslauncher). "
-    "Wire format: state uses 'jev/compact-v1'. state.candidate_actions contains all executable options with "
-    "columns [id, category, group, label, commands]. Each criteria key is an action id mapped to leaf:action_id. "
-    "Pick the single best action id from criteria to advance victory. Return only the requested Choice answer."
-)
+
+
+def live_policy_instructions(map_name: str | None = None) -> str:
+    map_info = f" on map '{map_name}'" if map_name else ""
+    return (
+        f"You are playing StarCraft: Brood War v1.16.1 via BWAPI v4.4.0 (injected by Chaoslauncher){map_info}. "
+        "Wire format: state uses 'jev/compact-v1'. state.candidate_actions contains available candidates with "
+        "columns [id, category, group, label, commands]. Each criteria key is an action id mapped to leaf:action_id. "
+        "Ground movement and attack-move candidates with null position require subsequent coordinate choices; "
+        "they do not target the origin. Pick the single best action id from criteria to advance victory. "
+        "Return only the requested Choice answer."
+    )
 
 
 class AgentLoop:
@@ -43,11 +65,14 @@ class AgentLoop:
         strategy: str = SHARED_POLICY,
         request_size_limit: int = 1_500_000,
         single_stage: bool = False,
+        spatial_precision_px: int = 8,
     ):
         if deadline_ms <= 0 or ttl_frames <= 0 or not 8 <= limit <= 50:
             raise ValueError("Invalid deadline, TTL or candidate limit")
         if request_size_limit <= 0:
             raise ValueError("Request size limit must be positive")
+        if spatial_precision_px <= 0:
+            raise ValueError("Spatial precision must be positive")
         if pricing is not None and any(p < 0 for p in pricing):
             raise ValueError("Token pricing cannot be negative")
         self.provider, self.output = provider, output
@@ -67,6 +92,7 @@ class AgentLoop:
         self.finished = False
         self.latest_value: dict | None = None
         self.single_stage = single_stage
+        self.spatial_precision_px = spatial_precision_px
 
     @property
     def staged(self) -> bool:
@@ -82,7 +108,7 @@ class AgentLoop:
         # model_dump which includes priorities never sent to the provider.
         payload = json.dumps(
             compact_request_payload(request, self.provider.model, choice_tree)
-            if self.staged
+            if self.staged or hasattr(self.provider, "endpoint")
             else {
                 "model": self.provider.model,
                 "state": state,
@@ -96,7 +122,7 @@ class AgentLoop:
         return request
 
     def _wire_bytes(self, request: DecisionRequest, choice_tree: dict | None = None) -> int | None:
-        if not self.staged:
+        if not (self.staged or hasattr(self.provider, "endpoint")):
             return None
         return len(
             json.dumps(
@@ -105,6 +131,68 @@ class AgentLoop:
                 separators=(",", ":"),
             ).encode()
         )
+
+    @staticmethod
+    def _resolve_spatial(result: ProviderResult, question: ChoiceQuestion) -> str:
+        if set(result.answers) != {"spatial"}:
+            raise ValueError("invalid_spatial_answer_ids")
+        answer = result.answers["spatial"]
+        if answer.type != "choice" or answer.choice not in question.criteria:
+            raise ValueError("invalid_spatial_choice")
+        if answer.probabilities is not None:
+            if set(answer.probabilities) != set(question.criteria):
+                raise ValueError("invalid_spatial_probabilities")
+            if any(not math.isfinite(v) or not 0 <= v <= 1 for v in answer.probabilities.values()):
+                raise ValueError("invalid_spatial_probability")
+            if not math.isclose(sum(answer.probabilities.values()), 1, abs_tol=0.01):
+                raise ValueError("invalid_spatial_probability_sum")
+        return answer.choice
+
+    async def _resolve_spatial_action(self, obs, state, action, deadline, calls):
+        command = action.commands[0]
+        if command.position is not None or command.kind not in {"move", "attack"}:
+            return action, []
+        if action.category not in {"spatial_move", "spatial_attack"}:
+            raise ValueError("missing_action_position")
+        spec = get_spatial_grid_spec(obs, self.spatial_precision_px)
+        actor = f"unit(s) {','.join(map(str, command.unit_ids))}"
+        bounds = (0, 0, spec.map_width, spec.map_height)
+        path = []
+
+        async def ask(question):
+            # Spatial criteria carry geometric bounds in their descriptions.
+            # Do not provide a choice tree: compact encoding would replace
+            # those descriptions with leaf references before reaching Jev.
+            request = self._request(self._context(state, [action]), {"spatial": question})
+            if deadline - time.monotonic() <= 0:
+                raise asyncio.TimeoutError()
+            result, latency = await self._call(request, deadline)
+            calls.append({"stage": "spatial", "latency_ms": latency, "usage": result.usage})
+            choice = self._resolve_spatial(result, question)
+            path.append(
+                {
+                    "node": "spatial",
+                    "choice": choice,
+                    "answer": result.answers["spatial"].model_dump(),
+                }
+            )
+            return choice
+
+        region = parse_region_key(await ask(build_region_question(actor, command.kind, spec)))
+        bounds = spec.region_bounds(*region)
+        level = 1
+        while max(bounds[2] - bounds[0], bounds[3] - bounds[1]) > spec.precision_px:
+            x, y = parse_refinement_key(
+                await ask(build_refinement_question(actor, command.kind, bounds, level))
+            )
+            bounds = child_bounds(bounds, x, y)
+            level += 1
+        position = {
+            "x": min(spec.map_width - 1, (bounds[0] + bounds[2] - 1) // 2),
+            "y": min(spec.map_height - 1, (bounds[1] + bounds[3] - 1) // 2),
+        }
+        resolved = command.model_copy(update={"position": Position(**position)})
+        return action.model_copy(update={"commands": (resolved,)}), path
 
     def _context(
         self,
@@ -192,7 +280,7 @@ class AgentLoop:
         tree = ChoiceTree(
             state,
             actions,
-            instructions=LIVE_POLICY_INSTRUCTIONS
+            instructions=live_policy_instructions(obs.map_name)
             if (staged or self.single_stage)
             else POLICY_INSTRUCTIONS,
         )
@@ -261,14 +349,22 @@ class AgentLoop:
                 if deadline - time.monotonic() <= 0:
                     raise asyncio.TimeoutError()
                 attempted_stage, call_started = "policy", time.perf_counter()
-                policy_result, latency = await self._call(tree.request, deadline)
+                policy_result, latency = await self._call(policy_request, deadline)
                 calls.append(
                     {"stage": "policy", "latency_ms": latency, "usage": policy_result.usage}
                 )
                 selected, path = tree.resolve(policy_result)
             else:
                 selected, path = tree.resolve(ProviderResult(model=self.provider.model, answers={}))
+            if selected.commands:
+                selected, spatial_path = await self._resolve_spatial_action(
+                    obs, state, selected, deadline, calls
+                )
+                path.extend(spatial_path)
         except Exception as exc:
+            # A selected spatial action is only executable after every coordinate
+            # choice resolves. Never let its placeholder command cross the bridge.
+            selected = actions[0]
             if attempted_stage and not any(c["stage"] == attempted_stage for c in calls):
                 calls.append(
                     {

@@ -4,10 +4,6 @@
       "additionalProperties": false,
       "properties": {
         "unit_type": {
-          "enum": [
-            "Terran_Supply_Depot",
-            "Terran_Barracks"
-          ],
           "title": "Unit Type",
           "type": "string"
         },
@@ -292,10 +288,6 @@
         "can_train": {
           "default": [],
           "items": {
-            "enum": [
-              "Terran_SCV",
-              "Terran_Marine"
-            ],
             "type": "string"
           },
           "title": "Can Train",
@@ -358,14 +350,26 @@
       "title": "Map Hash",
       "type": "string"
     },
+    "map_width": {
+      "default": 0,
+      "maximum": 8192,
+      "minimum": 0,
+      "title": "Map Width",
+      "type": "integer"
+    },
+    "map_height": {
+      "default": 0,
+      "maximum": 8192,
+      "minimum": 0,
+      "title": "Map Height",
+      "type": "integer"
+    },
     "self_race": {
-      "const": "Terran",
       "default": "Terran",
       "title": "Self Race",
       "type": "string"
     },
     "enemy_race": {
-      "const": "Terran",
       "default": "Terran",
       "title": "Enemy Race",
       "type": "string"

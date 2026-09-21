@@ -10,6 +10,7 @@ The Python service listens only on `127.0.0.1:8765`. The native worker sends JSO
 - `frame` advances strictly within a match. There is one active match per server and one request in flight.
 - `map_name` must match the service configuration. `map_hash` must remain unchanged within the match.
 - Coordinates in `position` are **pixels**; construction `tile` coordinates are **32-pixel build tiles**.
+- `map_width` and `map_height` are the actual map pixel dimensions from BWAPI (`mapWidth()*32` and `mapHeight()*32`); Jev coordinate selection uses these bounds.
 - `supply_used` and `supply_total` are human supply (BWAPI values divided by two).
 - `units` includes owned units and capability lists computed by BWAPI (`canTrain`, `canBuild`, `canGather`). Python also checks resources, supply, completion and producer state.
 - `enemies` includes only currently visible units. Python filters on `visible` again. Start locations are public map hypotheses, not known enemy bases.
@@ -40,7 +41,7 @@ A successful response contains:
 }
 ```
 
-Supported commands: `train`, `build`, `gather`, `attack` (attack-move), `move`. A `wait` has no commands. One macro action may apply to multiple units, but a response contains at most one command object in v1. The action generator, not the provider, owns command arguments.
+Supported commands: `train`, `build`, `gather`, `attack` (attack-move), `move`, `repair`, `stop`, `hold_position`, `siege`, `unsiege`, `cloak`, `decloak`. A `wait` has no commands. One macro action may apply to multiple units, but a response contains at most one command object in v1. The action generator, not the provider, owns command arguments.
 
 Before executing on the game thread, the native module checks match ID, observed frame, expiry, monotonicity, owned/live/completed units, permitted unit types, current BWAPI legality and duplicate continuous orders. Commands may partially succeed if members of a squad disappear. Receipts retain attempted/accepted/effective unit-command counts and a reason; the reason describes the last encountered rejection/suppression and is not an atomic squad transaction.
 
@@ -52,8 +53,23 @@ All BWAPI calls occur on the game thread. Only serialized JSON enters the backgr
 
 Shutting down the Python service cleanly while a match is active produces an incomplete summary with unknown outcome. A crashed/disconnected game can leave a trace without a summary; do not count it as a loss. Restart the service for an abandoned active match.
 
-For Jev, an eligible decision consists of two sequential provider requests: one Noul `win_probability` request and one Choice policy request. The policy request receives the fresh value estimate. A shared per-step deadline covers both requests; partial value success is retained in the trace if policy fails. The same Jev model performs both roles.
+For staged Jev, an eligible decision consists of two sequential provider requests: one Noul `win_probability` request and one Choice policy request. The policy request receives the fresh value estimate. A spatial ground action then adds one sequential Choice request per coordinate level. Single-stage skips the value request but uses the same policy and coordinate route. A shared per-step deadline covers all requests; partial value success is retained in the trace if policy fails. The same Jev model performs all roles.
 
 Provider requests have no in-call retries. Timeout, invalid options/probabilities, rate limits, cumulative request-size guard failures and other provider failures select wait and start a two-second wall-clock cooldown. Every fallback is logged. A request-size guard must reject before sending an oversized cumulative history; live HTTP errors return 400/409/413/415/500 and never issue a command.
 
-Changing the shared provider deadline does not change bridge transport timeouts. Keep it under one second for this initial bridge or update both configurations together. Two sequential calls and full history make the six-frame, 2–4 decisions/second cadence a target only. Receipts report command acceptance/rejection, not completion; later observations are required to infer effects.
+Changing the shared provider deadline does not change bridge transport timeouts. The native HTTP send/receive timeouts are currently 15 seconds. Keep the total decision deadline below that budget and configure `--ttl-frames` to cover the expected elapsed game frames; the bridge rejects expired decisions. Receipts report command acceptance/rejection, not completion; later observations are required to infer effects.
+
+
+### Spatial Ground Coordinate Selection and Limitations
+- Ground `move` and attack-move actions resolve uniformly over the complete map: 8x8 regions, then sequential 8x8 refinements until the selected rectangle is at most the configured precision (CLI: `--spatial-precision-px`, default 8px). The command uses the selected rectangle center.
+- Region and each refinement are separate Jev Choice requests. They share the step deadline and request-size guard; a timeout, invalid ID, malformed dimensions, or exhausted deadline yields `wait` and never executes a placeholder.
+- The default 200ms deadline may be too short for all sequential questions; configure a larger deadline for this path. This is a total-deadline contract, not a latency benchmark.
+- Building placement still uses BWAPI `getBuildLocation(type, homeTile, 24)`, so construction candidates remain limited to that native-radius query. Exhaustive Jev candidates do not include baseline aggregate or parity squads.
+
+Example for initial live testing (not a measured latency guarantee):
+
+```sh
+jevcraft serve --provider jev --single-stage --map "(2)Destination.scx" --spatial-precision-px 8 --deadline-ms 10000 --ttl-frames 480
+```
+
+Rebuild and replace the Windows bridge DLL to provide actual map dimensions, then restart the Python service. Inspect receipts for stale decisions and adjust the budgets to the actual game speed and measured latency. A large TTL accepts older state; it does not make inference faster. Use `--spatial-precision-px 1` to refine down to individual pixels, at the cost of additional calls. Map coverage means every pixel belongs to a selectable cell, not that every pixel is selectable at the default precision. Terrain/pathing data is not added by this change.

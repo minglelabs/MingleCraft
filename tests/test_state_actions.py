@@ -163,7 +163,7 @@ def test_malformed_distribution_is_rejected(observation):
     answers = dict(result.answers)
     answers["action"] = ChoiceAnswer(
         choice=next(iter(tree.request.questions["action"].criteria)),
-        probabilities={k: 0 for k in tree.request.questions["action"].criteria}
+        probabilities={k: 0 for k in tree.request.questions["action"].criteria},
     )
     with pytest.raises(ValueError, match="sum"):
         tree.resolve(result.model_copy(update={"answers": answers}))

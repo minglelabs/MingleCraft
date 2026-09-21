@@ -2,8 +2,15 @@ from collections import Counter
 
 from jevcraft.models import Action, Command, Observation, Position
 
+
 def _is_worker(u) -> bool:
-    return "SCV" in u.type or "Probe" in u.type or "Drone" in u.type or bool(u.can_gather) or bool(u.build_sites)
+    return (
+        "SCV" in u.type
+        or "Probe" in u.type
+        or "Drone" in u.type
+        or bool(u.can_gather)
+        or bool(u.build_sites)
+    )
 
 
 class ActionGenerator:
@@ -18,9 +25,7 @@ class ActionGenerator:
         actions = [Action(id="wait", category="wait", group="wait", label="Keep current orders")]
         counts = Counter(u.type for u in obs.units)
         units = sorted(obs.units, key=lambda u: u.id)
-        workers = [
-            u for u in units if _is_worker(u) and u.completed and not u.constructing
-        ]
+        workers = [u for u in units if _is_worker(u) and u.completed and not u.constructing]
         minerals = {m.id: m for m in obs.mineral_patches}
         if "economy" in due:
             idle_workers = [
@@ -65,10 +70,10 @@ class ActionGenerator:
                 if not u.completed or u.training:
                     continue
                 for kind in u.can_train:
-                        if obs.minerals < 50 or obs.supply_used >= obs.supply_total:
-                            continue
-                        priority = 75 if counts[kind] < 20 else 50
-                        actions.append(
+                    if obs.minerals < 50 or obs.supply_used >= obs.supply_total:
+                        continue
+                    priority = 75 if counts[kind] < 20 else 50
+                    actions.append(
                         Action(
                             id=f"train_{u.id}_{kind}",
                             category="production",
@@ -84,7 +89,13 @@ class ActionGenerator:
             for u in sorted(workers, key=lambda u: (not u.idle, u.id)):
                 for site in u.build_sites:
                     key = (site.unit_type, site.tile.x, site.tile.y)
-                    cost = 100 if "Supply" in site.unit_type or "Pylon" in site.unit_type or "Overlord" in site.unit_type else 150
+                    cost = (
+                        100
+                        if "Supply" in site.unit_type
+                        or "Pylon" in site.unit_type
+                        or "Overlord" in site.unit_type
+                        else 150
+                    )
                     if key in sites or obs.minerals < cost:
                         continue
                     sites.add(key)
@@ -112,7 +123,14 @@ class ActionGenerator:
                             ),
                         )
                     )
-        combat_army = [u for u in units if u.completed and not u.constructing and not _is_worker(u) and (u.can_attack or u.can_move)]
+        combat_army = [
+            u
+            for u in units
+            if u.completed
+            and not u.constructing
+            and not _is_worker(u)
+            and (u.can_attack or u.can_move)
+        ]
         squads = {
             "squad_1": [u for u in combat_army if u.id % 2 == 0][:200],
             "squad_2": [u for u in combat_army if u.id % 2 == 1][:200],
@@ -136,7 +154,7 @@ class ActionGenerator:
                             id=f"attack_{name}_{target}",
                             category="attack",
                             group=name,
-            label=f"Attack-move {name} ({len(squad)} units) to {target}",
+                            label=f"Attack-move {name} ({len(squad)} units) to {target}",
                             priority=50 if len(squad) >= 6 else 1,
                             commands=(
                                 Command(
@@ -151,7 +169,7 @@ class ActionGenerator:
                         id=f"retreat_{name}",
                         category="defense",
                         group=name,
-            label=f"Retreat {name} ({len(squad)} units) to home",
+                        label=f"Retreat {name} ({len(squad)} units) to home",
                         priority=90 if near_home and len(squad) < 6 else -1,
                         commands=(
                             Command(
@@ -166,7 +184,7 @@ class ActionGenerator:
                             id=f"defend_{name}",
                             category="defense",
                             group=name,
-            label=f"Defend home with {name} ({len(squad)} units)",
+                            label=f"Defend home with {name} ({len(squad)} units)",
                             priority=92 if near_home else -1,
                             commands=(
                                 Command(
@@ -205,26 +223,24 @@ class ActionGenerator:
         generator remains bounded and heuristic-driven; this path is for the second
         Jev stage, which needs the complete legal choice set.
         """
-        # The baseline intentionally keeps its historical shape, including one
-        # aggregate marine action.  Bound its input here so an oversized observed
-        # army cannot construct an invalid Command before exhaustive chunking.
-        combat_army = [u for u in obs.units if u.completed and not u.constructing and not _is_worker(u) and (u.can_attack or u.can_move)]
-        baseline_obs = obs
-        if len(combat_army) > 200:
-            bounded_units = tuple(u for u in obs.units if u not in combat_army) + tuple(combat_army[:200])
-            baseline_obs = obs.model_copy(update={"units": bounded_units})
-        baseline = self._generate_baseline(baseline_obs, due)
-        actions = [
-            action
-            for action in baseline
-            if all(len(command.unit_ids) <= 200 for command in action.commands)
-        ]
+        # Exhaustive Jev candidates are independent unit actions.  The legacy
+        # baseline is intentionally isolated above; its aggregate/parity policy
+        # must not leak into the full candidate set.
+        actions = [Action(id="wait", category="wait", group="wait", label="Keep current orders")]
         action_ids = {action.id for action in actions}
         units = sorted(obs.units, key=lambda unit: unit.id)
         workers = [
             unit
             for unit in units
-            if (unit.can_gather or unit.build_sites or "SCV" in unit.type or "Probe" in unit.type or "Drone" in unit.type) and unit.completed and not unit.constructing
+            if (
+                unit.can_gather
+                or unit.build_sites
+                or "SCV" in unit.type
+                or "Probe" in unit.type
+                or "Drone" in unit.type
+            )
+            and unit.completed
+            and not unit.constructing
         ]
         minerals = {mineral.id: mineral for mineral in obs.mineral_patches}
 
@@ -233,28 +249,30 @@ class ActionGenerator:
                 actions.append(action)
                 action_ids.add(action.id)
 
-        if "economy" in due:
-            idle_workers = [
-                w for w in workers if w.idle and any(m in minerals for m in w.can_gather)
-            ]
-            if len(idle_workers) > 1 and minerals:
-                patch = min(minerals.values(), key=lambda m: obs.home.distance_squared(m.position))
-                add(
-                    Action(
-                        id=f"gather_all_idle_{len(idle_workers)}",
-                        category="economy",
-                        group="workers",
-                        label=f"Send all {len(idle_workers)} idle SCVs to mine minerals",
-                        priority=120,
-                        commands=(
-                            Command(
-                                kind="gather",
-                                unit_ids=tuple(w.id for w in idle_workers),
-                                target_id=patch.id,
+        if "production" in due:
+            for unit in units:
+                if not unit.completed or unit.training or unit.constructing:
+                    continue
+                for unit_type in unit.can_train:
+                    # BWAPI capability is the source of legality here; native
+                    # revalidation remains authoritative at execution.
+                    add(
+                        Action(
+                            id=f"train_{unit.id}_{unit_type}",
+                            category="production",
+                            group=f"unit_{unit.id}",
+                            label=f"Train {unit_type} from {unit.type} {unit.id}",
+                            commands=(
+                                Command(
+                                    kind="train",
+                                    unit_ids=(unit.id,),
+                                    unit_type=unit_type,
+                                ),
                             ),
-                        ),
+                        )
                     )
-                )
+
+        if "economy" in due:
             for worker in workers:
                 for mineral_id in worker.can_gather:
                     mineral = minerals.get(mineral_id)
@@ -280,9 +298,6 @@ class ActionGenerator:
         if "construction" in due:
             for worker in workers:
                 for site in worker.build_sites:
-                    cost = 100 if "Supply" in site.unit_type or "Pylon" in site.unit_type or "Overlord" in site.unit_type else 150
-                    if obs.minerals < cost:
-                        continue
                     add(
                         Action(
                             id=f"build_{worker.id}_{site.unit_type}_{site.tile.x}_{site.tile.y}",
@@ -334,9 +349,7 @@ class ActionGenerator:
         combat_units = [
             unit
             for unit in units
-            if unit.completed
-            and not unit.constructing
-            and (unit.can_move or unit.can_attack)
+            if unit.completed and not unit.constructing and (unit.can_move or unit.can_attack)
         ]
         if "defense" in due or "attack" in due:
             for unit in combat_units:
@@ -385,13 +398,31 @@ class ActionGenerator:
                 if unit.can_move:
                     add(
                         Action(
+                            id=f"spatial_move_unit_{unit.id}",
+                            category="spatial_move",
+                            group=f"unit_{unit.id}",
+                            label=f"Move {unit.type} {unit.id} to ground coordinates via spatial selection",
+                            commands=(Command(kind="move", unit_ids=(unit.id,)),),
+                        )
+                    )
+                if unit.can_attack:
+                    add(
+                        Action(
+                            id=f"spatial_attack_unit_{unit.id}",
+                            category="spatial_attack",
+                            group=f"unit_{unit.id}",
+                            label=f"Attack-move {unit.type} {unit.id} to ground coordinates via spatial selection",
+                            commands=(Command(kind="attack", unit_ids=(unit.id,)),),
+                        )
+                    )
+                if unit.can_move:
+                    add(
+                        Action(
                             id=f"stop_{unit.id}",
                             category="defense",
                             group=f"unit_{unit.id}",
                             label=f"Stop {unit.type} {unit.id}",
-                            commands=(
-                                Command(kind="stop", unit_ids=(unit.id,)),
-                            ),
+                            commands=(Command(kind="stop", unit_ids=(unit.id,)),),
                         )
                     )
                     add(
@@ -400,9 +431,7 @@ class ActionGenerator:
                             category="defense",
                             group=f"unit_{unit.id}",
                             label=f"Hold position with {unit.type} {unit.id}",
-                            commands=(
-                                Command(kind="hold_position", unit_ids=(unit.id,)),
-                            ),
+                            commands=(Command(kind="hold_position", unit_ids=(unit.id,)),),
                         )
                     )
                 if _is_worker(unit):
@@ -415,48 +444,13 @@ class ActionGenerator:
                                     group=f"unit_{unit.id}",
                                     label=f"Repair {target_u.type} {target_u.id} with SCV {unit.id}",
                                     commands=(
-                                        Command(kind="repair", unit_ids=(unit.id,), target_id=target_u.id),
+                                        Command(
+                                            kind="repair",
+                                            unit_ids=(unit.id,),
+                                            target_id=target_u.id,
+                                        ),
                                     ),
                                 )
                             )
 
-        combat_army = [unit for unit in units if unit.completed and not unit.constructing and not _is_worker(unit) and (unit.can_attack or unit.can_move)]
-        squads = {
-            "squad_1": [unit for unit in combat_army if unit.id % 2 == 0],
-            "squad_2": [unit for unit in combat_army if unit.id % 2 == 1],
-            "all_combat": combat_army,
-        }
-        squad_targets = [*visible_targets, *start_targets, ("home", obs.home)]
-        if "attack" in due or "defense" in due:
-            for name, squad in squads.items():
-                for chunk_number, start in enumerate(range(0, len(squad), 200), start=1):
-                    chunk = squad[start : start + 200]
-                    if not chunk:
-                        continue
-                    suffix = "" if len(squad) <= 200 else f"_{chunk_number}"
-                    group = f"{name}{suffix}"
-                    ids = tuple(unit.id for unit in chunk)
-                    if "attack" in due and all(unit.can_attack for unit in chunk):
-                        for target, position in squad_targets:
-                            add(
-                                Action(
-                                    id=f"attack_{group}_{target}",
-                                    category="attack",
-                                    group=group,
-                                    label=f"Attack-move {group} ({len(chunk)} units) to {target}",
-                                    commands=(
-                                        Command(kind="attack", unit_ids=ids, position=position),
-                                    ),
-                                )
-                            )
-                    if "defense" in due and all(unit.can_move for unit in chunk):
-                        add(
-                            Action(
-                                id=f"retreat_{group}",
-                                category="defense",
-                                group=group,
-                                label=f"Retreat {group} ({len(chunk)} units) to home",
-                                commands=(Command(kind="move", unit_ids=ids, position=obs.home),),
-                            )
-                        )
         return actions

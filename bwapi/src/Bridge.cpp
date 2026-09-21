@@ -93,6 +93,7 @@ class Bridge final : public AIModule {
     return {
       {"protocol_version", 1}, {"match_id", match}, {"frame", Broodwar->getFrameCount()},
       {"map_name", Broodwar->mapFileName()}, {"map_hash", Broodwar->mapHash()},
+      {"map_width", Broodwar->mapWidth() * 32}, {"map_height", Broodwar->mapHeight() * 32},
       {"self_race", self->getRace().getName()}, {"enemy_race", enemy ? enemy->getRace().getName() : "Unknown"},
       {"complete_map_information", Broodwar->isFlagEnabled(Flag::CompleteMapInformation)},
       {"minerals", self->minerals()}, {"gas", self->gas()},

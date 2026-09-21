@@ -66,6 +66,12 @@ def main():
             default=1_500_000,
             help="Maximum wire-payload bytes per provider request (positive integer)",
         )
+        command.add_argument(
+            "--spatial-precision-px",
+            type=int,
+            default=8,
+            help="Final uniform ground-coordinate cell size in pixels",
+        )
         command.add_argument("--input-price", type=float, help="USD per million input tokens")
         command.add_argument("--output-price", type=float, help="USD per million output tokens")
         if name == "demo":
@@ -114,6 +120,7 @@ def main():
             pricing=pricing,
             strategy=strategy,
             request_size_limit=args.request_size_limit,
+            spatial_precision_px=args.spatial_precision_px,
         )
 
     try:

@@ -81,6 +81,17 @@ def test_exhaustive_includes_busy_workers_targets_and_all_scouts(observation):
     assert not any(action.id.startswith(("attack_unit_12_", "move_12_")) for action in actions)
 
 
+def test_exhaustive_preserves_per_unit_production_candidates(observation):
+    producer = observation.units[0].model_copy(update={"can_train": ("Terran_SCV",)})
+    obs = observation.model_copy(update={"units": (producer, *observation.units[1:])})
+
+    actions = ActionGenerator().generate(obs, {"production"}, exhaustive=True)
+
+    train = next(action for action in actions if action.id == "train_1_Terran_SCV")
+    assert train.commands[0].kind == "train"
+    assert train.commands[0].unit_ids == (1,)
+
+
 def test_exhaustive_has_more_than_fifty_candidates(observation):
     marines = tuple(
         Unit(

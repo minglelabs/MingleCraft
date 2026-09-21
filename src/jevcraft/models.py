@@ -89,6 +89,8 @@ class Observation(Model):
     frame: int = Field(ge=0)
     map_name: str = Field(min_length=1, max_length=256)
     map_hash: str = Field(min_length=1, max_length=128)
+    map_width: int = Field(default=0, ge=0, le=8192)
+    map_height: int = Field(default=0, ge=0, le=8192)
     self_race: str = "Terran"
     enemy_race: str = "Terran"
     complete_map_information: Literal[False] = False
