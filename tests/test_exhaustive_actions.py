@@ -434,3 +434,69 @@ def test_exhaustive_target_attacks_groups_and_capabilities(observation):
 
     assert "decloak_41" in actions_by_id
     assert actions_by_id["decloak_41"].commands[0].kind == "decloak"
+
+
+def test_choice_tree_hierarchical_split_guarantees_under_255_choices():
+    import asyncio
+
+    from minglecraft.actions.hierarchy import MAX_CHOICES_PER_QUESTION, ChoiceTree
+    from minglecraft.agents.providers import RandomProvider, RuleBasedProvider
+    from minglecraft.models import Action
+
+    # Create 350 candidate actions across different categories
+    actions = [
+        Action(id="wait", category="wait", group="wait", label="Keep current orders", priority=0)
+    ]
+    for i in range(1, 150):
+        actions.append(
+            Action(
+                id=f"gather_worker_{i}_mineral_1",
+                category="economy",
+                group="workers",
+                label=f"Send worker {i} to mineral 1",
+                priority=100 if i == 1 else 10,
+            )
+        )
+    for i in range(150, 300):
+        actions.append(
+            Action(
+                id=f"attack_unit_{i}_enemy_1",
+                category="attack",
+                group="combat",
+                label=f"Attack enemy 1 with unit {i}",
+                priority=50,
+            )
+        )
+    for i in range(300, 360):
+        actions.append(
+            Action(
+                id=f"build_worker_{i}_pylon",
+                category="construction",
+                group="buildings",
+                label=f"Build pylon with worker {i}",
+                priority=80,
+            )
+        )
+
+    tree = ChoiceTree({}, actions)
+    assert tree.is_hierarchical
+
+    # Assert every question has <= 200 criteria (well below Jev 255 limit)
+    for q_id, q in tree.request.questions.items():
+        assert len(q.criteria) <= MAX_CHOICES_PER_QUESTION, (
+            f"Question {q_id} has {len(q.criteria)} choices"
+        )
+
+    # Test RuleBasedProvider resolution
+    rule_result = asyncio.run(RuleBasedProvider().decide(tree.request))
+    chosen_action, path = tree.resolve(rule_result)
+    assert chosen_action.id == "gather_worker_1_mineral_1"
+    assert len(path) == 2
+    assert path[0]["node"] == "category"
+    assert path[0]["choice"] == "economy"
+
+    # Test RandomProvider resolution
+    rng_result = asyncio.run(RandomProvider(42).decide(tree.request))
+    chosen_random, random_path = tree.resolve(rng_result)
+    assert chosen_random in actions
+    assert len(random_path) == 2

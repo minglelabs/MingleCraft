@@ -51,8 +51,18 @@ class Bridge final : public AIModule {
       }
     }
     std::vector<std::pair<UnitType, TilePosition>> sites;
+    bool hasPylonPower = false;
+    if (self->getRace() == Races::Protoss) {
+      for (auto u : self->getUnits()) {
+        if (u->exists() && u->getType() == UnitTypes::Protoss_Pylon && u->isCompleted()) {
+          hasPylonPower = true;
+          break;
+        }
+      }
+    }
     for (auto type : UnitTypes::allUnitTypes()) {
       if (type.getRace() != self->getRace() || !type.isBuilding() || type.isSpecialBuilding()) continue;
+      if (type.requiresPsi() && !hasPylonPower) continue;
       auto tile = Broodwar->getBuildLocation(type, homeTile, 24);
       if (tile.isValid()) sites.push_back({type, tile});
     }
