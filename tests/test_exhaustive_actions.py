@@ -165,3 +165,83 @@ def test_constructing_worker_has_no_movement_candidates(observation):
     obs = observation.model_copy(update={"units": (worker,)})
     actions = ActionGenerator().generate(obs, {"attack", "defense", "scout"}, exhaustive=True)
     assert all(80 not in command.unit_ids for action in actions for command in action.commands)
+
+
+def test_gas_gathering_and_special_abilities_and_groups():
+    from jevcraft.actions.generator import ActionGenerator
+    from jevcraft.models import Mineral, Observation, Position, Unit
+
+    obs = Observation(
+        match_id="test_match",
+        frame=100,
+        map_name="Destination.scx",
+        map_hash="hash1",
+        map_width=4096,
+        map_height=4096,
+        minerals=500,
+        gas=100,
+        supply_used=10,
+        supply_total=20,
+        home=Position(x=100, y=100),
+        units=(
+            Unit(
+                id=1,
+                type="Terran SCV",
+                position=Position(x=100, y=100),
+                hit_points=60,
+                can_gather=(10, 20),
+            ),
+            Unit(
+                id=20,
+                type="Terran Refinery",
+                position=Position(x=150, y=150),
+                hit_points=750,
+                completed=True,
+            ),
+            Unit(
+                id=2,
+                type="Terran Marine",
+                position=Position(x=200, y=200),
+                hit_points=40,
+                can_attack=True,
+                can_move=True,
+            ),
+            Unit(
+                id=3,
+                type="Terran Marine",
+                position=Position(x=210, y=210),
+                hit_points=40,
+                can_attack=True,
+                can_move=True,
+            ),
+            Unit(
+                id=4,
+                type="Terran Siege Tank - Tank Mode",
+                position=Position(x=220, y=220),
+                hit_points=150,
+                can_attack=True,
+                can_move=True,
+            ),
+            Unit(
+                id=5,
+                type="Terran Wraith",
+                position=Position(x=250, y=250),
+                hit_points=120,
+                can_attack=True,
+                can_move=True,
+            ),
+        ),
+        mineral_patches=(Mineral(id=10, position=Position(x=120, y=120)),),
+    )
+
+    gen = ActionGenerator()
+    actions = gen._generate_exhaustive(obs, {"economy", "attack", "defense"})
+    ids = {a.id for a in actions}
+
+    assert "gather_1_10" in ids
+    assert "gather_gas_1_20" in ids
+    assert "siege_4" in ids
+    assert "cloak_5" in ids
+    assert "decloak_5" in ids
+    assert "spatial_attack_group_all_marines" in ids
+    assert "spatial_attack_group_all_combat" in ids
