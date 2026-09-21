@@ -3,6 +3,16 @@ from collections import Counter
 from minglecraft.models import Observation
 
 
+def _is_worker(unit) -> bool:
+    return (
+        "SCV" in unit.type
+        or "Probe" in unit.type
+        or "Drone" in unit.type
+        or bool(unit.can_gather)
+        or bool(unit.build_sites)
+    )
+
+
 class StateBuilder:
     """Memory contains only observations actually seen, with explicit age."""
 
@@ -34,11 +44,17 @@ class StateBuilder:
         own = Counter(u.type for u in observation.units)
         complete = Counter(u.type for u in observation.units if u.completed)
         marines = [u for u in observation.units if u.type == "Terran_Marine" and u.completed]
+        combat = [
+            u
+            for u in observation.units
+            if u.completed and not _is_worker(u) and (u.can_attack or u.can_move)
+        ]
         squads = {}
         for name, members in {
             "squad_1": [u for u in marines if u.id % 2 == 0],
             "squad_2": [u for u in marines if u.id % 2 == 1],
             "all_marines": marines,
+            "all_combat": combat,
         }.items():
             if members:
                 squads[name] = {
@@ -62,7 +78,7 @@ class StateBuilder:
             "own_counts": dict(own),
             "completed_counts": dict(complete),
             "squads": squads,
-            "idle_workers": sum(u.type == "Terran_SCV" and u.idle for u in observation.units),
+            "idle_workers": sum(_is_worker(u) and u.idle for u in observation.units),
             "enemy_visible": [e.model_dump(exclude={"visible"}) for e in visible],
             "enemy_last_seen": [
                 dict(v, age_frames=observation.frame - v["last_seen_frame"])

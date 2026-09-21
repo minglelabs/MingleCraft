@@ -9,7 +9,7 @@ import httpx
 from minglecraft import __version__
 from minglecraft.actions.executor import envelope
 from minglecraft.actions.generator import ActionGenerator
-from minglecraft.actions.hierarchy import ChoiceTree
+from minglecraft.actions.hierarchy import PROBABILITY_SUM_TOLERANCE, ChoiceTree
 from minglecraft.actions.pruner import prune
 from minglecraft.actions.spatial import (
     build_refinement_question,
@@ -47,7 +47,10 @@ def live_policy_instructions(map_name: str | None = None) -> str:
         "then the actual unit or unit group, then its executable command or target. Each criteria key is the exact "
         "option ID for that node. A criteria value is a reference such as node:question_id or leaf:action_id. "
         "All requested questions are evaluated independently in the same state; the program follows the selected "
-        "references to execute one leaf action. Answer every requested Choice with an existing option ID. "
+        "references to execute one leaf action. Use observation.self_race and enemy_race when interpreting the "
+        "state. Compare worker training, supply or power, construction, gathering, and combat candidates; do not "
+        "repeat a gather order by default when a legal production or construction candidate addresses the current "
+        "state. Answer every requested Choice with an existing option ID. "
         "Ground-coordinate candidates with null position or tile require subsequent coordinate choices; "
         "they do not target the origin. Return only the requested Choice answers."
     )
@@ -147,7 +150,12 @@ class AgentLoop:
                 raise ValueError("invalid_spatial_probabilities")
             if any(not math.isfinite(v) or not 0 <= v <= 1 for v in answer.probabilities.values()):
                 raise ValueError("invalid_spatial_probability")
-            if not math.isclose(sum(answer.probabilities.values()), 1, abs_tol=0.01):
+            if not math.isclose(
+                sum(answer.probabilities.values()),
+                1,
+                rel_tol=0.0,
+                abs_tol=PROBABILITY_SUM_TOLERANCE,
+            ):
                 raise ValueError("invalid_spatial_probability_sum")
         return answer.choice
 

@@ -13,6 +13,10 @@ def _is_worker(u) -> bool:
     )
 
 
+def _worker_label(unit) -> str:
+    return f"{unit.type} {unit.id}"
+
+
 class ActionGenerator:
     """Generate BWAPI-legal candidates for baseline or exhaustive Jev selection."""
 
@@ -38,7 +42,7 @@ class ActionGenerator:
                         id=f"gather_all_idle_{len(idle_workers)}",
                         category="economy",
                         group="workers",
-                        label=f"Send all {len(idle_workers)} idle SCVs to mine minerals",
+                        label=f"Send all {len(idle_workers)} idle workers to mine minerals",
                         priority=120,
                         commands=(
                             Command(
@@ -58,7 +62,7 @@ class ActionGenerator:
                             id=f"gather_{u.id}_{patch.id}",
                             category="economy",
                             group="workers",
-                            label=f"Send idle SCV {u.id} to visible mineral patch {patch.id}",
+                            label=f"Send idle {_worker_label(u)} to visible mineral patch {patch.id}",
                             priority=100,
                             commands=(
                                 Command(kind="gather", unit_ids=(u.id,), target_id=patch.id),
@@ -111,7 +115,7 @@ class ActionGenerator:
                             id=f"build_{u.id}_{site.unit_type}_{site.tile.x}_{site.tile.y}",
                             category="construction",
                             group=site.unit_type,
-                            label=f"Build {site.unit_type} with SCV {u.id} at tile {site.tile.x},{site.tile.y}",
+                            label=f"Build {site.unit_type} with {_worker_label(u)} at tile {site.tile.x},{site.tile.y}",
                             priority=priority,
                             commands=(
                                 Command(
@@ -205,7 +209,7 @@ class ActionGenerator:
                                 id=f"scout_{scout.id}_{target.id}",
                                 category="scout",
                                 group="scout_worker",
-                                label=f"Scout possible start {target.id} with SCV {scout.id}",
+                                label=f"Scout possible start {target.id} with {_worker_label(scout)}",
                                 priority=35,
                                 commands=(
                                     Command(
@@ -288,7 +292,7 @@ class ActionGenerator:
                             id=f"gather_{worker.id}_{mineral.id}",
                             category="economy",
                             group="workers",
-                            label=f"Send {'idle ' if worker.idle else ''}SCV {worker.id} to visible mineral patch {mineral.id}",
+                            label=f"Send {'idle ' if worker.idle else ''}{_worker_label(worker)} to visible mineral patch {mineral.id}",
                             priority=100 if worker.idle else 0,
                             commands=(
                                 Command(
@@ -305,7 +309,7 @@ class ActionGenerator:
                             id=f"gather_gas_{worker.id}_{refinery.id}",
                             category="economy",
                             group="workers",
-                            label=f"Send {'idle ' if worker.idle else ''}SCV {worker.id} to {refinery.type} {refinery.id}",
+                            label=f"Send {'idle ' if worker.idle else ''}{_worker_label(worker)} to {refinery.type} {refinery.id}",
                             priority=100 if worker.idle else 0,
                             commands=(
                                 Command(
@@ -326,7 +330,7 @@ class ActionGenerator:
                             category="construction",
                             group=site.unit_type,
                             label=(
-                                f"Build {site.unit_type} with SCV {worker.id} "
+                                f"Build {site.unit_type} with {_worker_label(worker)} "
                                 f"at tile {site.tile.x},{site.tile.y}"
                             ),
                             commands=(
@@ -395,7 +399,7 @@ class ActionGenerator:
                             id=f"scout_{scout.id}_{target}",
                             category="scout",
                             group="scout_worker",
-                            label=f"Scout possible start {target} with SCV {scout.id}",
+                            label=f"Scout possible start {target} with {_worker_label(scout)}",
                             commands=(
                                 Command(kind="move", unit_ids=(scout.id,), position=position),
                             ),
@@ -745,7 +749,9 @@ class ActionGenerator:
 
         worker_units = [w for w in workers if w.can_move]
         if len(worker_units) >= 2:
-            groups["all_scvs"] = [w.id for w in worker_units]
+            scv_ids = [worker.id for worker in worker_units if "SCV" in worker.type]
+            if len(scv_ids) >= 2:
+                groups["all_scvs"] = scv_ids
             groups["all_workers"] = [w.id for w in worker_units]
 
         for group_name, group_unit_ids in groups.items():

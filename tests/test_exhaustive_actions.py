@@ -92,6 +92,65 @@ def test_exhaustive_preserves_per_unit_production_candidates(observation):
     assert train.commands[0].unit_ids == (1,)
 
 
+def test_exhaustive_protoss_exposes_probe_pylon_and_worker_targets():
+    from minglecraft.models import Mineral, Observation
+
+    probe_build_site = BuildSite(unit_type="Protoss_Pylon", tile=Position(x=8, y=8))
+    obs = Observation(
+        match_id="protoss_match",
+        frame=0,
+        map_name="Destination.scx",
+        map_hash="hash1",
+        self_race="Protoss",
+        minerals=200,
+        gas=0,
+        supply_used=4,
+        supply_total=9,
+        home=Position(x=100, y=100),
+        units=(
+            Unit(
+                id=1,
+                type="Protoss_Nexus",
+                position=Position(x=100, y=100),
+                hit_points=1000,
+                can_train=("Protoss_Probe",),
+            ),
+            *(
+                Unit(
+                    id=probe_id,
+                    type="Protoss_Probe",
+                    position=Position(x=110 + probe_id, y=100),
+                    hit_points=20,
+                    idle=True,
+                    can_move=True,
+                    can_gather=(100,),
+                    build_sites=(probe_build_site,),
+                )
+                for probe_id in range(2, 6)
+            ),
+        ),
+        mineral_patches=(Mineral(id=100, position=Position(x=120, y=100)),),
+    )
+
+    actions = ActionGenerator().generate(
+        obs,
+        {"economy", "production", "construction", "attack", "defense", "scout"},
+        exhaustive=True,
+    )
+    by_id = {action.id: action for action in actions}
+
+    assert "train_1_Protoss_Probe" in by_id
+    assert all(f"gather_{probe_id}_100" in by_id for probe_id in range(2, 6))
+    assert all(f"build_{probe_id}_Protoss_Pylon_8_8" in by_id for probe_id in range(2, 6))
+    assert "spatial_move_group_all_workers" in by_id
+    assert not any(action.id.startswith("spatial_move_group_all_scvs") for action in actions)
+    assert all(
+        "SCV" not in action.label
+        for action in actions
+        if action.category in {"economy", "construction", "scout"}
+    )
+
+
 def test_exhaustive_has_more_than_fifty_candidates(observation):
     marines = tuple(
         Unit(

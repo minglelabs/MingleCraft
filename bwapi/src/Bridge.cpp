@@ -62,7 +62,8 @@ class Bridge final : public AIModule {
     }
     for (auto type : UnitTypes::allUnitTypes()) {
       if (type.getRace() != self->getRace() || !type.isBuilding() || type.isSpecialBuilding()) continue;
-      if (type.requiresPsi() && !hasPylonPower) continue;
+      if (type.requiresPsi() && !hasPylonPower &&
+          !(self->getRace() == Races::Protoss && type == UnitTypes::Protoss_Pylon)) continue;
       auto tile = Broodwar->getBuildLocation(type, homeTile, 24);
       if (tile.isValid()) sites.push_back({type, tile});
     }

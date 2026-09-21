@@ -129,6 +129,23 @@ def test_parse_invalid_keys():
         parse_region_key("invalid_key")
 
 
+def test_spatial_rounded_probability_distribution_is_accepted():
+    question = build_region_question(
+        "unit 1", "move", SpatialGridSpec(map_width=8192, map_height=8192)
+    )
+    keys = list(question.criteria)
+    probabilities = {key: 0.0 for key in keys}
+    probabilities[keys[0]] = 0.49
+    probabilities[keys[1]] = 0.50
+    result = ProviderResult(
+        model="test",
+        answers={
+            "spatial": ChoiceAnswer(choice=keys[0], probabilities=probabilities),
+        },
+    )
+    assert AgentLoop._resolve_spatial(result, question) == keys[0]
+
+
 class SpatialProvider:
     name, model, remote, supports_value = "fake", "fake-spatial", False, False
 

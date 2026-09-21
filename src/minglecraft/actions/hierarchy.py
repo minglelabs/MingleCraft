@@ -6,6 +6,7 @@ from minglecraft.models import Action, ChoiceAnswer, ChoiceQuestion, DecisionReq
 from minglecraft.strategy.policy import POLICY_INSTRUCTIONS
 
 MAX_CHOICES_PER_QUESTION = 200
+PROBABILITY_SUM_TOLERANCE = 0.02
 BranchEntry = tuple[str, str, str, float]
 
 
@@ -106,7 +107,8 @@ class ChoiceTree:
                 self._add_partition_node(
                     command_node,
                     command_entries,
-                    f"{instructions} Choose the executable command or target for the selected actor/group.",
+                    f"{instructions} For action kind '{category}' and actor/group '{actor_label}', "
+                    "choose the executable command or target.",
                     "command",
                     questions,
                 )
@@ -122,7 +124,8 @@ class ChoiceTree:
             self._add_partition_node(
                 actor_node,
                 actor_entries,
-                f"{instructions} Choose the actual unit or unit group that should act.",
+                f"{instructions} For action kind '{category}', choose the actual unit or unit group "
+                "that should act.",
                 "actor/group",
                 questions,
             )
@@ -220,7 +223,12 @@ class ChoiceTree:
                 not math.isfinite(value) or not 0 <= value <= 1 for value in probabilities.values()
             ):
                 raise ValueError("Invalid probability")
-            if not math.isclose(sum(probabilities.values()), 1, abs_tol=0.01):
+            if not math.isclose(
+                sum(probabilities.values()),
+                1,
+                rel_tol=0.0,
+                abs_tol=PROBABILITY_SUM_TOLERANCE,
+            ):
                 raise ValueError("Probabilities must sum to one")
 
     def resolve(self, result: ProviderResult) -> tuple[Action, list[dict]]:

@@ -77,6 +77,24 @@ def test_training_checks_resources_and_supply(observation, updates):
     )
 
 
+def test_state_builder_counts_non_terran_workers(observation):
+    probes = tuple(
+        Unit(
+            id=probe_id,
+            type="Protoss_Probe",
+            position=observation.home,
+            hit_points=20,
+            idle=True,
+            can_gather=(100,),
+        )
+        for probe_id in range(2, 6)
+    )
+    state = StateBuilder().build(
+        observation.model_copy(update={"self_race": "Protoss", "units": probes})
+    )
+    assert state["idle_workers"] == 4
+
+
 def test_native_capability_is_required(observation):
     units = tuple(
         u.model_copy(update={"can_train": (), "can_gather": (), "build_sites": ()})
@@ -167,6 +185,22 @@ def test_malformed_distribution_is_rejected(observation):
     )
     with pytest.raises(ValueError, match="sum"):
         tree.resolve(result.model_copy(update={"answers": answers}))
+
+
+def test_rounded_probability_distribution_is_accepted(observation):
+    tree = ChoiceTree({}, generate(observation))
+    result = asyncio.run(RuleBasedProvider().decide(tree.request))
+    keys = list(tree.request.questions["action"].criteria)
+    probabilities = {key: 0.0 for key in keys}
+    probabilities[keys[0]] = 0.49
+    probabilities[keys[1]] = 0.50
+    answers = dict(result.answers)
+    answers["action"] = ChoiceAnswer(
+        choice=keys[0],
+        probabilities=probabilities,
+    )
+    selected, _ = tree.resolve(result.model_copy(update={"answers": answers}))
+    assert selected.id == keys[0]
 
 
 def test_random_provider_seed_is_reproducible(observation):
