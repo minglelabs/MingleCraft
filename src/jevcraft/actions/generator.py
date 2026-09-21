@@ -20,6 +20,27 @@ class ActionGenerator:
         ]
         minerals = {m.id: m for m in obs.mineral_patches}
         if "economy" in due:
+            idle_workers = [
+                u for u in workers if u.idle and any(m in minerals for m in u.can_gather)
+            ]
+            if len(idle_workers) > 1 and minerals:
+                patch = min(minerals.values(), key=lambda m: obs.home.distance_squared(m.position))
+                actions.append(
+                    Action(
+                        id=f"gather_all_idle_{len(idle_workers)}",
+                        category="economy",
+                        group="workers",
+                        label=f"Send all {len(idle_workers)} idle SCVs to mine minerals",
+                        priority=120,
+                        commands=(
+                            Command(
+                                kind="gather",
+                                unit_ids=tuple(u.id for u in idle_workers),
+                                target_id=patch.id,
+                            ),
+                        ),
+                    )
+                )
             for u in workers:
                 available = [minerals[m] for m in u.can_gather if m in minerals]
                 if u.idle and available:
@@ -223,6 +244,27 @@ class ActionGenerator:
                 action_ids.add(action.id)
 
         if "economy" in due:
+            idle_workers = [
+                w for w in workers if w.idle and any(m in minerals for m in w.can_gather)
+            ]
+            if len(idle_workers) > 1 and minerals:
+                patch = min(minerals.values(), key=lambda m: obs.home.distance_squared(m.position))
+                add(
+                    Action(
+                        id=f"gather_all_idle_{len(idle_workers)}",
+                        category="economy",
+                        group="workers",
+                        label=f"Send all {len(idle_workers)} idle SCVs to mine minerals",
+                        priority=120,
+                        commands=(
+                            Command(
+                                kind="gather",
+                                unit_ids=tuple(w.id for w in idle_workers),
+                                target_id=patch.id,
+                            ),
+                        ),
+                    )
+                )
             for worker in workers:
                 for mineral_id in worker.can_gather:
                     mineral = minerals.get(mineral_id)
@@ -233,7 +275,8 @@ class ActionGenerator:
                             id=f"gather_{worker.id}_{mineral.id}",
                             category="economy",
                             group="workers",
-                            label=f"Send SCV {worker.id} to visible mineral patch {mineral.id}",
+                            label=f"Send {'idle ' if worker.idle else ''}SCV {worker.id} to visible mineral patch {mineral.id}",
+                            priority=100 if worker.idle else 0,
                             commands=(
                                 Command(
                                     kind="gather",
