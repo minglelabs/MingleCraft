@@ -54,6 +54,11 @@ def main():
         command.add_argument("--deadline-ms", type=int, default=200)
         command.add_argument("--ttl-frames", type=int, default=24)
         command.add_argument("--candidate-limit", type=int, default=50)
+        command.add_argument(
+            "--single-stage",
+            action="store_true",
+            help="Skip value estimate stage and call policy directly for fast response",
+        )
         command.add_argument("--strategy-file", type=Path)
         command.add_argument(
             "--request-size-limit",
@@ -103,6 +108,7 @@ def main():
             deadline_ms=args.deadline_ms,
             ttl_frames=args.ttl_frames,
             limit=args.candidate_limit,
+            single_stage=getattr(args, "single_stage", False),
             seed=args.seed,
             mode="synthetic" if args.command == "demo" else "live",
             pricing=pricing,

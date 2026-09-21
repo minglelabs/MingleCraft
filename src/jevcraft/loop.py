@@ -20,7 +20,7 @@ from jevcraft.strategy.policy import POLICY_INSTRUCTIONS, SHARED_POLICY
 from jevcraft.strategy.scheduler import Scheduler
 
 LIVE_VALUE_INSTRUCTIONS = "Estimate the chance of ultimately winning from the supplied game state. Return only the requested Noul probability."
-LIVE_POLICY_INSTRUCTIONS = "Choose only the existing option that best improves the chance of winning from the supplied game state. Return only the requested Choice answer."
+LIVE_POLICY_INSTRUCTIONS = "Choose the existing option that best advances victory. Prioritize spending idle minerals on SCVs and Supply Depots when available. Return only the requested Choice answer."
 
 
 class AgentLoop:
@@ -37,6 +37,7 @@ class AgentLoop:
         pricing: tuple[float, float] | None = None,
         strategy: str = SHARED_POLICY,
         request_size_limit: int = 1_500_000,
+        single_stage: bool = False,
     ):
         if deadline_ms <= 0 or ttl_frames <= 0 or not 8 <= limit <= 50:
             raise ValueError("Invalid deadline, TTL or candidate limit")
@@ -60,10 +61,11 @@ class AgentLoop:
         self.retry_after = 0.0
         self.finished = False
         self.latest_value: dict | None = None
+        self.single_stage = single_stage
 
     @property
     def staged(self) -> bool:
-        return bool(getattr(self.provider, "supports_value", False))
+        return bool(getattr(self.provider, "supports_value", False)) and not self.single_stage
 
     def _request(
         self, state: dict, questions: dict, choice_tree: dict | None = None
@@ -170,6 +172,8 @@ class AgentLoop:
             },
         }
         staged = bool(getattr(self.provider, "supports_value", False))
+        if self.single_stage:
+            staged = False
         due = set(Scheduler.periods) if staged else self.scheduler.due(obs.frame)
         actions = (
             self.generator.generate(obs, due, exhaustive=True)
@@ -234,7 +238,15 @@ class AgentLoop:
                         ProviderResult(model=self.provider.model, answers={})
                     )
             elif tree.request.questions:
-                policy_request = tree.request
+                if hasattr(self.provider, "endpoint"):
+                    # Staged-like compact payload for direct policy call
+                    choice_tree = {node: dict(options) for node, options in tree.nodes.items()}
+                    policy_state = self._context(state, actions, None, choice_tree)
+                    policy_request = self._request(
+                        policy_state, tree.request.questions, choice_tree
+                    )
+                else:
+                    policy_request = tree.request
                 if deadline - time.monotonic() <= 0:
                     raise asyncio.TimeoutError()
                 attempted_stage, call_started = "policy", time.perf_counter()
