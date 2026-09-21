@@ -221,6 +221,7 @@ def test_gas_gathering_and_special_abilities_and_groups():
                 hit_points=150,
                 can_attack=True,
                 can_move=True,
+                can_siege=True,
             ),
             Unit(
                 id=5,
@@ -229,6 +230,8 @@ def test_gas_gathering_and_special_abilities_and_groups():
                 hit_points=120,
                 can_attack=True,
                 can_move=True,
+                can_cloak=True,
+                can_decloak=True,
             ),
         ),
         mineral_patches=(Mineral(id=10, position=Position(x=120, y=120)),),
@@ -259,6 +262,7 @@ def test_exhaustive_target_attacks_groups_and_capabilities(observation):
             can_gather=(100,),
             can_patrol=True,
             can_return_cargo=True,
+            can_attack=True,
         ),
         Unit(
             id=11,
@@ -267,6 +271,7 @@ def test_exhaustive_target_attacks_groups_and_capabilities(observation):
             hit_points=60,
             can_move=True,
             can_gather=(100,),
+            can_attack=True,
         ),
     )
     combat = (
@@ -321,6 +326,31 @@ def test_exhaustive_target_attacks_groups_and_capabilities(observation):
             can_move=True,
             can_attack=True,
             can_decloak=True,
+        ),
+        Unit(
+            id=50,
+            type="Zerg_Lurker",
+            position=observation.home,
+            hit_points=125,
+            can_move=True,
+            can_attack=True,
+            can_burrow=True,
+        ),
+        Unit(
+            id=60,
+            type="Terran_Dropship",
+            position=observation.home,
+            hit_points=150,
+            can_move=True,
+            can_lift=True,
+            can_land=True,
+            can_unload_all=True,
+            load_targets=(20,),
+            unload_targets=(20,),
+            can_use_tech=("Spider_Mines", "Stim_Packs"),
+            can_use_tech_without_target=("Stim_Packs",),
+            can_use_tech_at_position=("Spider_Mines",),
+            tech_target_ids={"Spider_Mines": (777,)},
         ),
     )
     enemy = Enemy(
@@ -380,6 +410,18 @@ def test_exhaustive_target_attacks_groups_and_capabilities(observation):
 
     assert "return_cargo_10" in actions_by_id
     assert actions_by_id["return_cargo_10"].commands[0].kind == "return_cargo"
+
+    assert "burrow_50" in actions_by_id
+    assert "lift_60" in actions_by_id
+    assert "spatial_land_unit_60" in actions_by_id
+    assert "load_60_20" in actions_by_id
+    assert "unload_60_20" in actions_by_id
+    assert "unload_all_60" in actions_by_id
+    assert "spatial_unload_all_unit_60" in actions_by_id
+    assert "use_tech_60_Stim_Packs" in actions_by_id
+    assert "use_tech_60_Spider_Mines_777" in actions_by_id
+    assert "spatial_use_tech_60_Spider_Mines" in actions_by_id
+    assert "spatial_use_tech_60_Stim_Packs" not in actions_by_id
 
     assert "siege_30" in actions_by_id
     assert actions_by_id["siege_30"].commands[0].kind == "siege"

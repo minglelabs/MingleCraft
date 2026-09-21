@@ -308,6 +308,124 @@
           },
           "title": "Build Sites",
           "type": "array"
+        },
+        "can_siege": {
+          "default": false,
+          "title": "Can Siege",
+          "type": "boolean"
+        },
+        "can_unsiege": {
+          "default": false,
+          "title": "Can Unsiege",
+          "type": "boolean"
+        },
+        "can_cloak": {
+          "default": false,
+          "title": "Can Cloak",
+          "type": "boolean"
+        },
+        "can_decloak": {
+          "default": false,
+          "title": "Can Decloak",
+          "type": "boolean"
+        },
+        "can_stim": {
+          "default": false,
+          "title": "Can Stim",
+          "type": "boolean"
+        },
+        "can_patrol": {
+          "default": false,
+          "title": "Can Patrol",
+          "type": "boolean"
+        },
+        "can_return_cargo": {
+          "default": false,
+          "title": "Can Return Cargo",
+          "type": "boolean"
+        },
+        "can_burrow": {
+          "default": false,
+          "title": "Can Burrow",
+          "type": "boolean"
+        },
+        "can_unburrow": {
+          "default": false,
+          "title": "Can Unburrow",
+          "type": "boolean"
+        },
+        "can_lift": {
+          "default": false,
+          "title": "Can Lift",
+          "type": "boolean"
+        },
+        "can_land": {
+          "default": false,
+          "title": "Can Land",
+          "type": "boolean"
+        },
+        "can_unload_all": {
+          "default": false,
+          "title": "Can Unload All",
+          "type": "boolean"
+        },
+        "load_targets": {
+          "default": [],
+          "items": {
+            "type": "integer"
+          },
+          "title": "Load Targets",
+          "type": "array"
+        },
+        "unload_targets": {
+          "default": [],
+          "items": {
+            "type": "integer"
+          },
+          "title": "Unload Targets",
+          "type": "array"
+        },
+        "repair_targets": {
+          "default": [],
+          "items": {
+            "type": "integer"
+          },
+          "title": "Repair Targets",
+          "type": "array"
+        },
+        "can_use_tech": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Can Use Tech",
+          "type": "array"
+        },
+        "can_use_tech_without_target": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Can Use Tech Without Target",
+          "type": "array"
+        },
+        "can_use_tech_at_position": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Can Use Tech At Position",
+          "type": "array"
+        },
+        "tech_target_ids": {
+          "additionalProperties": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "title": "Tech Target Ids",
+          "type": "object"
         }
       },
       "required": [

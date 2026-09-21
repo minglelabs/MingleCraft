@@ -4,7 +4,7 @@ Research date: 2026-09-21. This is a provider-selection note, not a provider swi
 
 ## MingleCraft baseline and decision target
 
-The current `src/jevcraft/agents/providers.py` already has an `OpenAIProvider` that sends one `/chat/completions` request, accepts a configurable `base_url` when instantiated programmatically, and builds a strict JSON Schema whose string enums come from each question's current `criteria`. This is the lowest-risk switching path.
+The current `src/minglecraft/agents/providers.py` already has an `OpenAIProvider` that sends one `/chat/completions` request, accepts a configurable `base_url` when instantiated programmatically, and builds a strict JSON Schema whose string enums come from each question's current `criteria`. This is the lowest-risk switching path.
 
 The latest post-history-removal live trace `bwapi_29908_1789891637947956` reported a successful value response at frame 2199 with `usage.input_tokens=32306` and a policy response with `400`. The input-token count confirms that the real context limit is materially binding; byte size alone is not an adequate test. Across 19 successful steps, the local measurements were:
 
@@ -36,7 +36,7 @@ Run `gemini-3.1-flash-lite` as the current Google alternative and `openai/gpt-os
 
 ### Programmatic adapter versus CLI command
 
-`OpenAIProvider` accepts `base_url` in Python, so Groq or another OpenAI-compatible service is programmatically possible. The CLI mapping in `src/jevcraft/cli.py` is narrower: `--base-url` defaults to `http://127.0.0.1:8000/v1`, and `provider_for()` passes it only to `LocalModelProvider`. For `--provider openai`, the CLI constructs `OpenAIProvider(api_key, args.model)` and therefore uses its default `https://api.openai.com/v1`. A Groq switch currently needs an adapter/configuration change or a programmatic caller; changing only `--model` on the existing `serve` command is insufficient.
+`OpenAIProvider` accepts `base_url` in Python, so Groq or another OpenAI-compatible service is programmatically possible. The CLI mapping in `src/minglecraft/cli.py` is narrower: `--base-url` defaults to `http://127.0.0.1:8000/v1`, and `provider_for()` passes it only to `LocalModelProvider`. For `--provider openai`, the CLI constructs `OpenAIProvider(api_key, args.model)` and therefore uses its default `https://api.openai.com/v1`. A Groq switch currently needs an adapter/configuration change or a programmatic caller; changing only `--model` on the existing `serve` command is insufficient.
 
 Do not preserve Jev's serial value/policy shape for these providers unless the value is required for a separate product metric. The fastest fair comparison is one request containing the finite-action policy decision. If `win_probability` is still required, put it beside the selected action in the same response schema; that is a schema/parser change, not a reason to issue a second sequential request. The current adapter returns only `ChoiceAnswer` values, so this combined response would require a later adapter/model-contract change and is deliberately outside this research-only edit.
 
@@ -64,6 +64,6 @@ All links were checked on 2026-09-21.
 - [Groq supported models](https://console.groq.com/docs/models): exact `openai/gpt-oss-20b` ID, context, max completion, price, and published decode speed.
 - [Groq Structured Outputs](https://console.groq.com/docs/structured-outputs): strict model list, schema guarantees, and unsupported streaming/tool-use caveat.
 - [Groq rate limits](https://console.groq.com/docs/rate-limits): organization-level RPM/TPM behavior and 429 handling.
-- Local implementation references: [`src/jevcraft/agents/providers.py`](../src/jevcraft/agents/providers.py) for programmatic `base_url`, and [`src/jevcraft/cli.py`](../src/jevcraft/cli.py) for the `local`-only CLI `--base-url` mapping.
+- Local implementation references: [`src/minglecraft/agents/providers.py`](../src/minglecraft/agents/providers.py) for programmatic `base_url`, and [`src/minglecraft/cli.py`](../src/minglecraft/cli.py) for the `local`-only CLI `--base-url` mapping.
 
 The exact callable IDs above are the IDs in current model documentation. Names such as `gemini-3.1-flash-lite-preview`, `gpt-4.1-nano-2025-04-14`, and the deprecated `gpt-5-mini-2025-08-07` snapshot are explicitly excluded. Current aliases still require an account-level live request before switching; this research did not use credentials or claim provider access.

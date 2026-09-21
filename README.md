@@ -66,11 +66,11 @@ The `demo` command defaults to **rule** so it runs without credentials. The live
 ```bash
 # Recommended when you do not have a direct TypeSafe account:
 export OPENROUTER_API_KEY=your-key
-minglecraft serve --provider openrouter-jev --model '~typesafe/jev-latest' --deadline-ms 800
+minglecraft serve --provider openrouter-jev --model '~typesafe/jev-latest' --deadline-ms 10000 --ttl-frames 480
 
 # Direct TypeSafe access is optional and requires its own account/key:
 export TYPESAFE_API_KEY=your-key
-minglecraft serve --provider jev --model jev-latest --deadline-ms 200
+minglecraft serve --provider jev --model jev-latest --deadline-ms 10000 --ttl-frames 480
 
 # Select a model that supports Chat Completions structured outputs:
 minglecraft serve --provider openai --model YOUR_MODEL --deadline-ms 800
@@ -133,7 +133,7 @@ Keep the game, BWAPI DLL and Python service on the home Windows machine. From th
 
 ```text
 bwapi/                  Windows C++ AIModule and asynchronous HTTP transport
-src/jevcraft/
+src/minglecraft/
   bwapi/                Local service and synthetic fixture
   state/                Compact state and last-seen memory
   actions/              Generator, pruner, choice hierarchy and executor envelope

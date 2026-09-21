@@ -59,6 +59,9 @@ class Bridge final : public AIModule {
     for (auto u : self->getUnits()) {
       if (!u->exists() || !u->getPosition().isValid()) continue;
       json trains = json::array(), gathers = json::array(), builds = json::array();
+      json loadTargets = json::array(), unloadTargets = json::array(), repairTargets = json::array();
+      json usableTechs = json::array(), noTargetTechs = json::array(), positionTechs = json::array();
+      json techTargetIds = json::object();
       if (u->isCompleted() && !u->isTraining()) {
         for (auto type : UnitTypes::allUnitTypes()) {
           if (type.getRace() != self->getRace()) continue;
@@ -75,17 +78,51 @@ class Bridge final : public AIModule {
         for (auto site : sites) if (u->canBuild(site.first, site.second))
           builds.push_back({{"unit_type", site.first.getName()}, {"tile", tilePosition(site.second)}});
       }
+      for (auto candidate : self->getUnits()) {
+        if (candidate == u || !candidate->exists() || !candidate->isVisible()) continue;
+        if (u->canLoad() && u->canLoad(candidate)) loadTargets.push_back(candidate->getID());
+        if (u->canUnload() && u->canUnload(candidate)) unloadTargets.push_back(candidate->getID());
+        if (u->getType().isWorker() && u->canRepair() && u->canRepair(candidate)) {
+          repairTargets.push_back(candidate->getID());
+        }
+      }
+      for (auto tech : TechTypes::allTechTypes()) {
+        if (tech == TechTypes::None || tech == TechTypes::Unknown || !u->canUseTechWithOrWithoutTarget(tech)) continue;
+        usableTechs.push_back(tech.getName());
+        if (u->canUseTechWithoutTarget(tech)) noTargetTechs.push_back(tech.getName());
+        if (u->canUseTech(tech, u->getPosition())) positionTechs.push_back(tech.getName());
+        json targets = json::array();
+        for (auto candidate : Broodwar->getAllUnits()) {
+          if (candidate && candidate->exists() && candidate->isVisible(self) && u->canUseTech(tech, candidate)) {
+            targets.push_back(candidate->getID());
+          }
+        }
+        techTargetIds[tech.getName()] = targets;
+      }
       own.push_back({
         {"id", u->getID()}, {"type", u->getType().getName()}, {"position", position(u->getPosition())},
         {"hit_points", u->getHitPoints()}, {"completed", u->isCompleted()}, {"idle", u->isIdle()},
         {"training", u->isTraining()}, {"constructing", u->isConstructing()},
         {"can_move", u->canMove()}, {"can_attack", u->canAttack()},
-        {"can_train", trains}, {"can_gather", gathers}, {"build_sites", builds}
+        {"can_train", trains}, {"can_gather", gathers}, {"build_sites", builds},
+        {"can_siege", u->canSiege()}, {"can_unsiege", u->canUnsiege()},
+        {"can_cloak", u->canCloak()}, {"can_decloak", u->canDecloak()},
+        {"can_stim", u->canUseTechWithoutTarget(TechTypes::Stim_Packs)},
+        {"can_patrol", u->canPatrol()}, {"can_return_cargo", u->canReturnCargo()},
+        {"can_burrow", u->canBurrow()}, {"can_unburrow", u->canUnburrow()},
+        {"can_lift", u->canLift()},
+        {"can_land", u->isLifted() && u->isCompleted() && u->canLand()},
+        {"can_unload_all", u->canUnloadAll()}, {"load_targets", loadTargets},
+        {"unload_targets", unloadTargets}, {"repair_targets", repairTargets},
+        {"can_use_tech", usableTechs},
+        {"can_use_tech_without_target", noTargetTechs},
+        {"can_use_tech_at_position", positionTechs},
+        {"tech_target_ids", techTargetIds}
       });
     }
     // Do not enumerate enemy()->getUnits(), inspect hidden properties, or enable CompleteMapInformation.
     for (auto u : Broodwar->getAllUnits()) {
-      if (!u->exists() || !u->isVisible(self) || !u->getPlayer()->isEnemy(self) || !u->getPosition().isValid()) continue;
+      if (!u->exists() || !u->isVisible(self) || !u->getPlayer() || !u->getPlayer()->isEnemy(self) || !u->getPosition().isValid()) continue;
       enemies.push_back({{"id", u->getID()}, {"type", u->getType().getName()},
                          {"position", position(u->getPosition())}, {"hit_points", u->getHitPoints()}, {"visible", true}});
     }
@@ -162,7 +199,7 @@ class Bridge final : public AIModule {
           } else if (kind == "attack") {
             if (command.contains("target_id") && !command.at("target_id").is_null()) {
               auto target = Broodwar->getUnit(command.at("target_id").get<int>());
-              valid = target && target->exists() && target->isVisible() && target->getPlayer()->isEnemy(Broodwar->self()) &&
+              valid = target && target->exists() && target->isVisible() && target->getPlayer() && target->getPlayer()->isEnemy(Broodwar->self()) &&
                       !unit->isConstructing() && unit->canAttack(target);
               if (valid) action = UnitCommand::attack(unit, target);
             } else if (command.contains("position") && !command.at("position").is_null()) {
@@ -246,13 +283,13 @@ class Bridge final : public AIModule {
                 valid = target.isValid() && unit->canUseTech(tech, target);
                 if (valid) action = UnitCommand::useTech(unit, tech, target);
               } else {
-                valid = unit->canUseTech(tech);
+                valid = unit->canUseTechWithoutTarget(tech);
                 action = UnitCommand::useTech(unit, tech);
               }
             }
           } else if (kind == "stim") {
             auto tech = TechTypes::Stim_Packs;
-            valid = unit->canUseTech(tech);
+            valid = unit->canUseTechWithoutTarget(tech);
             action = UnitCommand::useTech(unit, tech);
           }
           if (!valid || !unit->canIssueCommand(action)) { receipt["reason"] = "revalidation_failed"; continue; }

@@ -47,6 +47,18 @@ class Unit(Model):
     can_stim: bool = False
     can_patrol: bool = False
     can_return_cargo: bool = False
+    can_burrow: bool = False
+    can_unburrow: bool = False
+    can_lift: bool = False
+    can_land: bool = False
+    can_unload_all: bool = False
+    load_targets: tuple[int, ...] = ()
+    unload_targets: tuple[int, ...] = ()
+    repair_targets: tuple[int, ...] = ()
+    can_use_tech: tuple[str, ...] = ()
+    can_use_tech_without_target: tuple[str, ...] = ()
+    can_use_tech_at_position: tuple[str, ...] = ()
+    tech_target_ids: dict[str, tuple[int, ...]] = Field(default_factory=dict)
 
 
 class Enemy(Model):
@@ -130,6 +142,7 @@ class Command(Model):
     unit_ids: tuple[int, ...] = Field(min_length=1, max_length=200)
     unit_type: str | None = None
     target_id: int | None = None
+    tech: str | None = None
     position: Position | None = None
     tile: Position | None = None
 

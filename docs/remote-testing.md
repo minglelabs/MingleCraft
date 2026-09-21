@@ -17,7 +17,7 @@ Use the Mac only as a remote desktop client. This keeps the native game, the BWA
 5. On the Windows desktop, start the MingleCraft server locally:
 
    ```powershell
-   cd C:\path\to\jevcraft
+   cd C:\path\to\MingleCraft
    .\.venv\Scripts\Activate.ps1
    $env:OPENROUTER_API_KEY = "your-key"
    minglecraft serve --provider openrouter-jev --model "~typesafe/jev-latest" --map "(2)Destination.scx"
@@ -29,7 +29,7 @@ Tailscale's official Windows RDP guide supports connecting from macOS through th
 
 ## Why this stays separate
 
-Remote desktop and game automation have different failure and security boundaries. MingleCraft should own observations, finite decisions, BWAPI commands and evaluation traces. A future companion project, `jevcraft-remote`, can provide a narrow Windows operator agent for:
+Remote desktop and game automation have different failure and security boundaries. MingleCraft should own observations, finite decisions, BWAPI commands and evaluation traces. A future companion project, `minglecraft-remote`, can provide a narrow Windows operator agent for:
 
 - health checks and current match status;
 - starting or stopping an allowlisted MingleCraft process;
@@ -45,4 +45,3 @@ That agent should never expose arbitrary shell execution or keyboard/mouse injec
 - If the health check fails, start `minglecraft serve` on Windows before launching the match.
 - If the health check works but the game shows no actions, check `runs\` on Windows and confirm Chaoslauncher loaded `MingleCraft.dll`.
 - Do not expose port `8765` or RDP directly to the public internet.
-

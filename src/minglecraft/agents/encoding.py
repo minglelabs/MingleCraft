@@ -26,6 +26,7 @@ def _command(command: dict) -> list:
         command["target_id"],
         _position(command["position"]),
         _position(command["tile"]),
+        command["tech"],
     ]
 
 
@@ -67,6 +68,18 @@ def _units(units: list[dict]) -> dict:
         "can_stim",
         "can_patrol",
         "can_return_cargo",
+        "can_burrow",
+        "can_unburrow",
+        "can_lift",
+        "can_land",
+        "can_unload_all",
+        "load_targets",
+        "unload_targets",
+        "repair_targets",
+        "can_use_tech",
+        "can_use_tech_without_target",
+        "can_use_tech_at_position",
+        "tech_target_ids",
     ]
     rows = []
     for unit in units:
@@ -92,6 +105,18 @@ def _units(units: list[dict]) -> dict:
                 unit.get("can_stim", False),
                 unit.get("can_patrol", False),
                 unit.get("can_return_cargo", False),
+                unit.get("can_burrow", False),
+                unit.get("can_unburrow", False),
+                unit.get("can_lift", False),
+                unit.get("can_land", False),
+                unit.get("can_unload_all", False),
+                unit.get("load_targets", []),
+                unit.get("unload_targets", []),
+                unit.get("repair_targets", []),
+                unit.get("can_use_tech", []),
+                unit.get("can_use_tech_without_target", []),
+                unit.get("can_use_tech_at_position", []),
+                unit.get("tech_target_ids", {}),
             ]
         )
     return {"columns": columns, "rows": rows}
@@ -175,7 +200,7 @@ def compact_request_payload(
     }
     payload["state"]["legend"] = {
         "pos": "[x,y]",
-        "commands": "[kind,unit_ids,unit_type,target_id,position,tile]; positions use pos",
+        "commands": "[kind,unit_ids,unit_type,target_id,position,tile,tech]; positions use pos",
         "build_sites": "[unit_type,pos]",
         "choice_tree": "only unasked deterministic nodes; asked node mappings are in that question criteria",
         "choice_refs": "criteria/tree values use node:N or leaf:ACTION; option keys are exact answer IDs",

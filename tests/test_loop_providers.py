@@ -260,6 +260,7 @@ def test_compact_payload_round_trips_facts_commands_and_every_leaf(observation):
                         "target_id": command[3],
                         "position": pos(command[4]),
                         "tile": pos(command[5]),
+                        "tech": command[6],
                     }
                     for command in row["commands"]
                 ],

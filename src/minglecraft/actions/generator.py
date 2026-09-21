@@ -339,6 +339,21 @@ class ActionGenerator:
                             ),
                         )
                     )
+                    add(
+                        Action(
+                            id=f"spatial_build_{worker.id}_{site.unit_type}",
+                            category="spatial_build",
+                            group=f"unit_{worker.id}",
+                            label=f"Build {site.unit_type} with worker {worker.id} at ground coordinates",
+                            commands=(
+                                Command(
+                                    kind="build",
+                                    unit_ids=(worker.id,),
+                                    unit_type=site.unit_type,
+                                ),
+                            ),
+                        )
+                    )
 
         visible_enemy_targets = [
             (f"visible_{enemy.id}", enemy.position, enemy.id)
@@ -350,12 +365,25 @@ class ActionGenerator:
             for location in obs.locations
             if location.kind == "start"
         ]
+        own_object_targets = [(f"own_{unit.id}", unit.position) for unit in units if unit.completed]
+        mineral_targets = [
+            (f"mineral_{mineral.id}", mineral.position) for mineral in minerals.values()
+        ]
         move_targets = [
             *[(label, pos) for label, pos, _ in visible_enemy_targets],
+            *own_object_targets,
+            *mineral_targets,
             *start_targets,
             ("home", obs.home),
         ]
-        ground_attack_targets = [*start_targets, ("home", obs.home)]
+        ground_attack_targets = [
+            *[
+                (f"ground_visible_{enemy_id}", position)
+                for _, position, enemy_id in visible_enemy_targets
+            ],
+            *start_targets,
+            ("home", obs.home),
+        ]
 
         if "scout" in due:
             for scout in workers:
@@ -374,13 +402,14 @@ class ActionGenerator:
                         )
                     )
 
-        combat_units = [
+        controllable_units = [
             unit
             for unit in units
             if unit.completed and not unit.constructing and (unit.can_move or unit.can_attack)
         ]
+        combat_units = [unit for unit in controllable_units if not _is_worker(unit)]
         if "defense" in due or "attack" in due:
-            for unit in combat_units:
+            for unit in controllable_units:
                 if "defense" in due and unit.can_move:
                     add(
                         Action(
@@ -479,10 +508,7 @@ class ActionGenerator:
                             commands=(Command(kind="hold_position", unit_ids=(unit.id,)),),
                         )
                     )
-                can_unsiege = unit.can_unsiege or (
-                    "Tank" in unit.type and "Siege Mode" in unit.type
-                )
-                if can_unsiege:
+                if unit.can_unsiege:
                     add(
                         Action(
                             id=f"unsiege_{unit.id}",
@@ -492,10 +518,7 @@ class ActionGenerator:
                             commands=(Command(kind="unsiege", unit_ids=(unit.id,)),),
                         )
                     )
-                can_siege = unit.can_siege or (
-                    "Tank" in unit.type and "Siege Mode" not in unit.type
-                )
-                if can_siege:
+                if unit.can_siege:
                     add(
                         Action(
                             id=f"siege_{unit.id}",
@@ -505,8 +528,7 @@ class ActionGenerator:
                             commands=(Command(kind="siege", unit_ids=(unit.id,)),),
                         )
                     )
-                can_cloak = unit.can_cloak or ("Wraith" in unit.type or "Ghost" in unit.type)
-                if can_cloak:
+                if unit.can_cloak:
                     add(
                         Action(
                             id=f"cloak_{unit.id}",
@@ -516,8 +538,7 @@ class ActionGenerator:
                             commands=(Command(kind="cloak", unit_ids=(unit.id,)),),
                         )
                     )
-                can_decloak = unit.can_decloak or ("Wraith" in unit.type or "Ghost" in unit.type)
-                if can_decloak:
+                if unit.can_decloak:
                     add(
                         Action(
                             id=f"decloak_{unit.id}",
@@ -550,6 +571,15 @@ class ActionGenerator:
                                 ),
                             )
                         )
+                    add(
+                        Action(
+                            id=f"spatial_patrol_unit_{unit.id}",
+                            category="spatial_patrol",
+                            group=f"unit_{unit.id}",
+                            label=f"Patrol {unit.type} {unit.id} at ground coordinates",
+                            commands=(Command(kind="patrol", unit_ids=(unit.id,)),),
+                        )
+                    )
                 if unit.can_return_cargo:
                     add(
                         Action(
@@ -560,24 +590,148 @@ class ActionGenerator:
                             commands=(Command(kind="return_cargo", unit_ids=(unit.id,)),),
                         )
                     )
-                if _is_worker(unit):
-                    for target_u in units:
-                        if target_u.id != unit.id and target_u.hit_points < 1000:
-                            add(
-                                Action(
-                                    id=f"repair_{unit.id}_{target_u.id}",
-                                    category="defense",
-                                    group=f"unit_{unit.id}",
-                                    label=f"Repair {target_u.type} {target_u.id} with SCV {unit.id}",
-                                    commands=(
-                                        Command(
-                                            kind="repair",
-                                            unit_ids=(unit.id,),
-                                            target_id=target_u.id,
-                                        ),
-                                    ),
-                                )
+                if unit.can_burrow:
+                    add(
+                        Action(
+                            id=f"burrow_{unit.id}",
+                            category="defense",
+                            group=f"unit_{unit.id}",
+                            label=f"Burrow {unit.type} {unit.id}",
+                            commands=(Command(kind="burrow", unit_ids=(unit.id,)),),
+                        )
+                    )
+                if unit.can_unburrow:
+                    add(
+                        Action(
+                            id=f"unburrow_{unit.id}",
+                            category="defense",
+                            group=f"unit_{unit.id}",
+                            label=f"Unburrow {unit.type} {unit.id}",
+                            commands=(Command(kind="unburrow", unit_ids=(unit.id,)),),
+                        )
+                    )
+                if unit.can_lift:
+                    add(
+                        Action(
+                            id=f"lift_{unit.id}",
+                            category="defense",
+                            group=f"unit_{unit.id}",
+                            label=f"Lift {unit.type} {unit.id}",
+                            commands=(Command(kind="lift", unit_ids=(unit.id,)),),
+                        )
+                    )
+                if unit.can_land:
+                    add(
+                        Action(
+                            id=f"spatial_land_unit_{unit.id}",
+                            category="spatial_land",
+                            group=f"unit_{unit.id}",
+                            label=f"Land {unit.type} {unit.id} at ground coordinates",
+                            commands=(Command(kind="land", unit_ids=(unit.id,)),),
+                        )
+                    )
+                for target_id in unit.load_targets:
+                    add(
+                        Action(
+                            id=f"load_{unit.id}_{target_id}",
+                            category="defense",
+                            group=f"unit_{unit.id}",
+                            label=f"Load unit {target_id} into {unit.type} {unit.id}",
+                            commands=(
+                                Command(kind="load", unit_ids=(unit.id,), target_id=target_id),
+                            ),
+                        )
+                    )
+                for target_id in unit.unload_targets:
+                    add(
+                        Action(
+                            id=f"unload_{unit.id}_{target_id}",
+                            category="defense",
+                            group=f"unit_{unit.id}",
+                            label=f"Unload unit {target_id} from {unit.type} {unit.id}",
+                            commands=(
+                                Command(kind="unload", unit_ids=(unit.id,), target_id=target_id),
+                            ),
+                        )
+                    )
+                if unit.can_unload_all:
+                    add(
+                        Action(
+                            id=f"unload_all_{unit.id}",
+                            category="defense",
+                            group=f"unit_{unit.id}",
+                            label=f"Unload all units from {unit.type} {unit.id}",
+                            commands=(Command(kind="unload_all", unit_ids=(unit.id,)),),
+                        )
+                    )
+                    add(
+                        Action(
+                            id=f"spatial_unload_all_unit_{unit.id}",
+                            category="spatial_unload",
+                            group=f"unit_{unit.id}",
+                            label=f"Unload all units from {unit.type} {unit.id} at ground coordinates",
+                            commands=(Command(kind="unload_all", unit_ids=(unit.id,)),),
+                        )
+                    )
+                for tech in unit.can_use_tech:
+                    if tech in unit.can_use_tech_without_target:
+                        add(
+                            Action(
+                                id=f"use_tech_{unit.id}_{tech}",
+                                category="ability",
+                                group=f"unit_{unit.id}",
+                                label=f"Use {tech} with {unit.type} {unit.id}",
+                                commands=(
+                                    Command(kind="use_tech", unit_ids=(unit.id,), tech=tech),
+                                ),
                             )
+                        )
+                    for target_id in unit.tech_target_ids.get(tech, ()):
+                        add(
+                            Action(
+                                id=f"use_tech_{unit.id}_{tech}_{target_id}",
+                                category="ability",
+                                group=f"unit_{unit.id}",
+                                label=f"Use {tech} with {unit.type} {unit.id} on {target_id}",
+                                commands=(
+                                    Command(
+                                        kind="use_tech",
+                                        unit_ids=(unit.id,),
+                                        tech=tech,
+                                        target_id=target_id,
+                                    ),
+                                ),
+                            )
+                        )
+                    if tech in unit.can_use_tech_at_position:
+                        add(
+                            Action(
+                                id=f"spatial_use_tech_{unit.id}_{tech}",
+                                category="spatial_ability",
+                                group=f"unit_{unit.id}",
+                                label=f"Use {tech} with {unit.type} {unit.id} at ground coordinates",
+                                commands=(
+                                    Command(kind="use_tech", unit_ids=(unit.id,), tech=tech),
+                                ),
+                            )
+                        )
+                if _is_worker(unit):
+                    for target_id in unit.repair_targets:
+                        add(
+                            Action(
+                                id=f"repair_{unit.id}_{target_id}",
+                                category="defense",
+                                group=f"unit_{unit.id}",
+                                label=f"Repair unit {target_id} with worker {unit.id}",
+                                commands=(
+                                    Command(
+                                        kind="repair",
+                                        unit_ids=(unit.id,),
+                                        target_id=target_id,
+                                    ),
+                                ),
+                            )
+                        )
 
         # Group actions by unit type, all combat units, and worker groups
         groups: dict[str, list[int]] = {}
@@ -598,45 +752,50 @@ class ActionGenerator:
             if len(group_unit_ids) < 2:
                 continue
             u_ids = tuple(group_unit_ids[:200])
+            group_units = [unit for unit in units if unit.id in u_ids]
+            group_can_attack = all(unit.can_attack for unit in group_units)
+            group_can_move = all(unit.can_move for unit in group_units)
             group_label = group_name.replace("_", " ")
             if "attack" in due or "defense" in due:
-                add(
-                    Action(
-                        id=f"spatial_attack_group_{group_name}",
-                        category="spatial_attack",
-                        group=group_name,
-                        label=f"Attack-move {group_label} ({len(u_ids)} units) to ground coordinates via spatial selection",
-                        commands=(Command(kind="attack", unit_ids=u_ids),),
+                if group_can_attack:
+                    add(
+                        Action(
+                            id=f"spatial_attack_group_{group_name}",
+                            category="spatial_attack",
+                            group=group_name,
+                            label=f"Attack-move {group_label} ({len(u_ids)} units) to ground coordinates via spatial selection",
+                            commands=(Command(kind="attack", unit_ids=u_ids),),
+                        )
                     )
-                )
-                add(
-                    Action(
-                        id=f"spatial_move_group_{group_name}",
-                        category="spatial_move",
-                        group=group_name,
-                        label=f"Move {group_label} ({len(u_ids)} units) to ground coordinates via spatial selection",
-                        commands=(Command(kind="move", unit_ids=u_ids),),
+                if group_can_move:
+                    add(
+                        Action(
+                            id=f"spatial_move_group_{group_name}",
+                            category="spatial_move",
+                            group=group_name,
+                            label=f"Move {group_label} ({len(u_ids)} units) to ground coordinates via spatial selection",
+                            commands=(Command(kind="move", unit_ids=u_ids),),
+                        )
                     )
-                )
-                add(
-                    Action(
-                        id=f"stop_group_{group_name}",
-                        category="defense",
-                        group=group_name,
-                        label=f"Stop {group_label} ({len(u_ids)} units)",
-                        commands=(Command(kind="stop", unit_ids=u_ids),),
+                    add(
+                        Action(
+                            id=f"stop_group_{group_name}",
+                            category="defense",
+                            group=group_name,
+                            label=f"Stop {group_label} ({len(u_ids)} units)",
+                            commands=(Command(kind="stop", unit_ids=u_ids),),
+                        )
                     )
-                )
-                add(
-                    Action(
-                        id=f"hold_group_{group_name}",
-                        category="defense",
-                        group=group_name,
-                        label=f"Hold position with {group_label} ({len(u_ids)} units)",
-                        commands=(Command(kind="hold_position", unit_ids=u_ids),),
+                    add(
+                        Action(
+                            id=f"hold_group_{group_name}",
+                            category="defense",
+                            group=group_name,
+                            label=f"Hold position with {group_label} ({len(u_ids)} units)",
+                            commands=(Command(kind="hold_position", unit_ids=u_ids),),
+                        )
                     )
-                )
-                if "attack" in due:
+                if "attack" in due and group_can_attack:
                     for target, position, enemy_id in visible_enemy_targets:
                         add(
                             Action(

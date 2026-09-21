@@ -51,8 +51,8 @@ def main():
         command.add_argument("--base-url", default="http://127.0.0.1:8000/v1")
         command.add_argument("--seed", type=int, default=0)
         command.add_argument("--output", type=Path, default=Path("runs"))
-        command.add_argument("--deadline-ms", type=int, default=200)
-        command.add_argument("--ttl-frames", type=int, default=24)
+        command.add_argument("--deadline-ms", type=int, default=10_000)
+        command.add_argument("--ttl-frames", type=int, default=480)
         command.add_argument("--candidate-limit", type=int, default=50)
         command.add_argument(
             "--single-stage",

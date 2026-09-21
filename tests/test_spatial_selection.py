@@ -15,7 +15,7 @@ from minglecraft.actions.spatial import (
 from minglecraft.agents import JevProvider
 from minglecraft.bwapi.synthetic import SyntheticGame
 from minglecraft.loop import AgentLoop
-from minglecraft.models import ChoiceAnswer, NoulAnswer, ProviderResult
+from minglecraft.models import ChoiceAnswer, NoulAnswer, ProviderResult, Unit
 
 
 def test_spatial_grid_coverage():
@@ -238,7 +238,29 @@ def test_agent_loop_resolves_group_spatial_action_end_to_end(tmp_path):
     provider = GroupSpatialProvider()
     loop = AgentLoop(provider, tmp_path, single_stage=True, deadline_ms=5000)
     obs = SyntheticGame("spatial_group").observe()
-    # Ensure we have multiple combat units so all_combat exists
+    obs = obs.model_copy(
+        update={
+            "units": (
+                *obs.units,
+                Unit(
+                    id=20,
+                    type="Terran_Marine",
+                    position=obs.home,
+                    hit_points=40,
+                    can_move=True,
+                    can_attack=True,
+                ),
+                Unit(
+                    id=21,
+                    type="Terran_Marine",
+                    position=obs.home,
+                    hit_points=40,
+                    can_move=True,
+                    can_attack=True,
+                ),
+            )
+        }
+    )
     decision = asyncio.run(loop.step(obs))
 
     assert decision.action_id == "spatial_attack_group_all_combat"

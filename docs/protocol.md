@@ -12,9 +12,9 @@ The Python service listens only on `127.0.0.1:8765`. The native worker sends JSO
 - Coordinates in `position` are **pixels**; construction `tile` coordinates are **32-pixel build tiles**.
 - `map_width` and `map_height` are the actual map pixel dimensions from BWAPI (`mapWidth()*32` and `mapHeight()*32`); Jev coordinate selection uses these bounds.
 - `supply_used` and `supply_total` are human supply (BWAPI values divided by two).
-- `units` includes owned units and capability lists computed by BWAPI (`canTrain`, `canBuild`, `canGather`). Python also checks resources, supply, completion and producer state.
+- `units` includes owned units and capability lists computed by BWAPI (`canTrain`, `canBuild`, `canGather`, movement, combat, transport, ability and tech capabilities). Python also checks resources, supply, completion and producer state.
 - `enemies` includes only currently visible units. Python filters on `visible` again. Start locations are public map hypotheses, not known enemy bases.
-- Last-seen enemy positions expire after 2,880 frames, remain explicitly dated, and are removed on an observed death. Memory resets per game. The initial generator targets visible enemies and public starts; remembered positions inform the provider but are not independently generated attack targets yet.
+- Last-seen enemy positions expire after 2,880 frames, remain explicitly dated, and are removed on an observed death. Memory resets per game. Target attacks are generated for every currently visible enemy unit; remembered positions remain provider context until the enemy is visible again.
 - `complete_map_information: true`, non-Terran races, duplicate entity IDs and extra top-level fields are rejected.
 - `counters` are cumulative per match. `receipts` is the last 64 execution results, intentionally repeated until later snapshots. Consumers must deduplicate receipts by `decision_id`.
 - The model-facing history is cumulative per match and resets at match boundaries. It records timestamped observations with hidden enemies filtered, issued actions, deduplicated command receipts, prior value estimates and the final match event. Observation deltas carry forward unchanged fields; a replaced list replaces the prior list.
@@ -35,7 +35,7 @@ A successful response contains:
   "action_id": "train_1_Terran_SCV",
   "commands": [
     {"kind": "train", "unit_ids": [1], "unit_type": "Terran_SCV",
-     "target_id": null, "position": null, "tile": null}
+     "target_id": null, "tech": null, "position": null, "tile": null}
   ],
   "fallback_reason": null
 }

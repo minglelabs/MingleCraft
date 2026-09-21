@@ -44,7 +44,7 @@ def live_policy_instructions(map_name: str | None = None) -> str:
         f"You are playing StarCraft: Brood War v1.16.1 via BWAPI v4.4.0 (injected by Chaoslauncher){map_info}. "
         "Wire format: state uses 'jev/compact-v1'. state.candidate_actions contains available candidates with "
         "columns [id, category, group, label, commands]. Each criteria key is an action id mapped to leaf:action_id. "
-        "Ground movement and attack-move candidates with null position require subsequent coordinate choices; "
+        "Ground-coordinate candidates with null position or tile require subsequent coordinate choices; "
         "they do not target the origin. Pick the single best action id from criteria to advance victory. "
         "Return only the requested Choice answer."
     )
@@ -56,8 +56,8 @@ class AgentLoop:
         provider: DecisionProvider,
         output: Path,
         *,
-        deadline_ms: int = 200,
-        ttl_frames: int = 24,
+        deadline_ms: int = 10_000,
+        ttl_frames: int = 480,
         limit: int = 50,
         seed: int = 0,
         mode: str = "live",
@@ -150,10 +150,15 @@ class AgentLoop:
 
     async def _resolve_spatial_action(self, obs, state, action, deadline, calls):
         command = action.commands[0]
-        if command.position is not None or command.kind not in {"move", "attack"}:
+        spatial_kinds = {"move", "attack", "patrol", "build", "land", "unload_all", "use_tech"}
+        if not action.category.startswith("spatial_"):
             return action, []
-        if action.category not in {"spatial_move", "spatial_attack"}:
-            raise ValueError("missing_action_position")
+        if (
+            command.position is not None
+            or command.tile is not None
+            or command.kind not in spatial_kinds
+        ):
+            return action, []
         spec = get_spatial_grid_spec(obs, self.spatial_precision_px)
         actor = f"unit(s) {','.join(map(str, command.unit_ids))}"
         bounds = (0, 0, spec.map_width, spec.map_height)
@@ -204,7 +209,12 @@ class AgentLoop:
             "x": min(spec.map_width - 1, (bounds[0] + bounds[2] - 1) // 2),
             "y": min(spec.map_height - 1, (bounds[1] + bounds[3] - 1) // 2),
         }
-        resolved = command.model_copy(update={"position": Position(**position)})
+        if command.kind in {"build", "land"}:
+            resolved = command.model_copy(
+                update={"tile": Position(x=position["x"] // 32, y=position["y"] // 32)}
+            )
+        else:
+            resolved = command.model_copy(update={"position": Position(**position)})
         return action.model_copy(update={"commands": (resolved,)}), path
 
     def _context(
@@ -254,9 +264,11 @@ class AgentLoop:
                     "deadline_ms": self.deadline_ms,
                     "ttl_frames": self.ttl_frames,
                     "request_size_limit": self.request_size_limit,
-                    "candidate_limit": None if self.staged else self.limit,
-                    "candidate_exhaustive": self.staged,
-                    "scheduling": "all_categories" if self.staged else "scheduler_due",
+                    "candidate_limit": None if (self.staged or self.single_stage) else self.limit,
+                    "candidate_exhaustive": self.staged or self.single_stage,
+                    "scheduling": "all_categories"
+                    if (self.staged or self.single_stage)
+                    else "scheduler_due",
                     "map_name": obs.map_name,
                     "map_hash": obs.map_hash,
                     "cadence_frames": self.scheduler.periods,
