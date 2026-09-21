@@ -98,6 +98,10 @@ def test_jev_sends_all_exhaustive_candidates(observation, tmp_path):
     asyncio.run(loop.step(observation))
     assert len(provider.requests[0].state["candidate_actions"]) == 61
     assert len(provider.requests[1].state["candidate_actions"]) == 61
+    policy = provider.requests[1]
+    assert policy.choice_tree is not None
+    assert "category" in policy.questions
+    assert all(len(question.criteria) <= 200 for question in policy.questions.values())
 
 
 def test_request_size_guard_sends_nothing_and_keeps_history_intact(observation, tmp_path):

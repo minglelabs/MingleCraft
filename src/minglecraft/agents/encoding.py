@@ -164,7 +164,9 @@ def _observation(observation: dict) -> dict:
 
 
 def _reference(child: str) -> str:
-    return f"leaf:{child[5:]}" if child.startswith("leaf:") else f"node:{child}"
+    if child.startswith(("node:", "leaf:")):
+        return child
+    return f"node:{child}"
 
 
 def compact_state(

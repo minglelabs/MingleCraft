@@ -189,6 +189,75 @@ def test_compact_payload_without_tree_keeps_external_criteria():
     assert payload["questions"]["q"]["criteria"] == {"a": "Alpha"}
 
 
+def test_hierarchical_wire_payload_preserves_actor_path_and_leaf_refs():
+    from minglecraft.actions.hierarchy import MAX_CHOICES_PER_QUESTION
+
+    actions = [
+        Action(id="wait", category="wait", group="wait", label="Wait"),
+        Action(
+            id="move_10_home",
+            category="move",
+            group="scouts",
+            label="Move unit 10 home",
+            commands=(Command(kind="move", unit_ids=(10,), position=Position(x=4, y=5)),),
+        ),
+        Action(
+            id="patrol_10_home",
+            category="move",
+            group="scouts",
+            label="Patrol unit 10 home",
+            commands=(Command(kind="patrol", unit_ids=(10,), position=Position(x=4, y=5)),),
+        ),
+        Action(
+            id="attack_10_enemy_1",
+            category="attack",
+            group="marines",
+            label="Attack enemy 1 with unit 10",
+            commands=(Command(kind="attack", unit_ids=(10,), target_id=1),),
+        ),
+        Action(
+            id="attack_11_enemy_1",
+            category="attack",
+            group="marines",
+            label="Attack enemy 1 with unit 11",
+            commands=(Command(kind="attack", unit_ids=(11,), target_id=1),),
+        ),
+    ]
+    tree = ChoiceTree({}, actions, hierarchical=True)
+    payload = compact_request_payload(tree.request, "jev-test")
+
+    assert tree.descendants("category") == [action.id for action in actions]
+    assert all(
+        len(question.criteria) <= MAX_CHOICES_PER_QUESTION
+        for question in tree.request.questions.values()
+    )
+    references = [
+        reference
+        for question in payload["questions"].values()
+        for reference in question["criteria"].values()
+    ] + [
+        reference
+        for options in payload["state"]["choice_tree"].values()
+        for reference in options.values()
+    ]
+    assert references
+    assert all(reference.startswith(("node:", "leaf:")) for reference in references)
+    assert not any(reference.startswith("node:node:") for reference in references)
+
+    answers = {
+        node: ChoiceAnswer(choice=next(iter(question.criteria)))
+        for node, question in tree.request.questions.items()
+    }
+    selected, path = tree.resolve(ProviderResult(model="jev-test", answers=answers))
+    assert selected.id in {action.id for action in actions}
+    assert path[0]["node"] == "category"
+
+    missing = dict(answers)
+    del missing["category"]
+    with pytest.raises(ValueError, match="do not match"):
+        tree.resolve(ProviderResult(model="jev-test", answers=missing))
+
+
 def test_compact_payload_round_trips_facts_commands_and_every_leaf(observation):
     enemy = Enemy(
         id=900, type="Terran_Marine", position=Position(x=30, y=31), hit_points=40, visible=True

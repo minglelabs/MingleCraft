@@ -18,6 +18,90 @@ from minglecraft.loop import AgentLoop
 from minglecraft.models import ChoiceAnswer, NoulAnswer, ProviderResult, Unit
 
 
+def _raw_choice_path(request, target):
+    tree = request.choice_tree
+    assert tree is not None
+    root = "category" if "category" in tree else "action"
+
+    def visit(node, seen):
+        assert node not in seen
+        for option, child in tree[node].items():
+            if child == f"leaf:{target}":
+                return [(node, option)]
+            if child in tree:
+                suffix = visit(child, (*seen, node))
+                if suffix is not None:
+                    return [(node, option), *suffix]
+        return None
+
+    path = visit(root, ())
+    assert path is not None
+    return dict(path)
+
+
+def _action_result(request, predicate):
+    tree = request.choice_tree
+    assert tree is not None
+    leaves = []
+
+    def collect(node):
+        for child in tree[node].values():
+            if child.startswith("leaf:"):
+                leaves.append(child[5:])
+            else:
+                collect(child)
+
+    collect("category" if "category" in tree else "action")
+    target = next(action_id for action_id in leaves if predicate(action_id))
+    path = _raw_choice_path(request, target)
+    answers = {
+        node: ChoiceAnswer(choice=path.get(node, next(iter(question.criteria))))
+        for node, question in request.questions.items()
+    }
+    return ProviderResult(model="fake-spatial", answers=answers)
+
+
+def _wire_action_answers(payload, predicate):
+    edges = {node: question["criteria"] for node, question in payload["questions"].items()}
+    edges.update(payload["state"].get("choice_tree", {}))
+    leaves = []
+
+    def collect(node):
+        for child in edges[node].values():
+            if child.startswith("leaf:"):
+                leaves.append(child[5:])
+            else:
+                collect(child[5:])
+
+    root = "category" if "category" in edges else "action"
+    collect(root)
+    target = next(action_id for action_id in leaves if predicate(action_id))
+
+    def visit(node, seen):
+        assert node not in seen
+        for option, child in edges[node].items():
+            if child == f"leaf:{target}":
+                return [(node, option)]
+            if child.startswith("node:"):
+                suffix = visit(child[5:], (*seen, node))
+                if suffix is not None:
+                    return [(node, option), *suffix]
+        return None
+
+    path = dict(visit(root, ()))
+    answers = {}
+    for node, question in payload["questions"].items():
+        choices = question["criteria"]
+        choice = path.get(node, next(iter(choices)))
+        answers[node] = {
+            "type": "choice",
+            "choice": choice,
+            "confidence": 1,
+            "probabilities": {key: float(key == choice) for key in choices},
+        }
+    return answers
+
+
 def test_spatial_grid_coverage():
     spec = SpatialGridSpec(map_width=8192, map_height=8192)
     assert spec.map_width == 8192
@@ -54,13 +138,10 @@ class SpatialProvider:
 
     async def decide(self, request):
         self.requests.append(request)
-        if "action" in request.questions:
-            action = next(
-                key
-                for key in request.questions["action"].criteria
-                if key.startswith("spatial_move_unit_")
+        if "spatial" not in request.questions:
+            return _action_result(
+                request, lambda action_id: action_id.startswith("spatial_move_unit_")
             )
-            return ProviderResult(model=self.model, answers={"action": ChoiceAnswer(choice=action)})
         if self.invalid:
             return ProviderResult(
                 model=self.model, answers={"spatial": ChoiceAnswer(choice="outside_the_grid")}
@@ -78,8 +159,8 @@ def test_agent_loop_resolves_uniform_ground_coordinate_end_to_end(tmp_path):
 
     assert decision.action_id.startswith("spatial_move_unit_")
     assert decision.commands[0].position.model_dump() == {"x": 3803, "y": 3363}
-    assert [set(request.questions) for request in provider.requests] == [
-        {"action"},
+    assert "category" in provider.requests[0].questions
+    assert [set(request.questions) for request in provider.requests[1:]] == [
         {"spatial"},
         {"spatial"},
         {"spatial"},
@@ -119,21 +200,10 @@ def test_staged_jev_wire_keeps_spatial_bounds_and_map_dimensions(tmp_path):
         questions = payload["questions"]
         if "win_probability" in questions:
             answers = {"win_probability": {"type": "noul", "noul": 0.6}}
-        elif "action" in questions:
-            action = next(
-                key
-                for key in questions["action"]["criteria"]
-                if key.startswith("spatial_move_unit_")
+        elif "spatial" not in questions:
+            answers = _wire_action_answers(
+                payload, lambda action_id: action_id.startswith("spatial_move_unit_")
             )
-            choices = questions["action"]["criteria"]
-            answers = {
-                "action": {
-                    "type": "choice",
-                    "choice": action,
-                    "confidence": 1,
-                    "probabilities": {key: float(key == action) for key in choices},
-                }
-            }
         else:
             choices = questions["spatial"]["criteria"]
             choice = "region_7_6" if "region_7_6" in choices else "refine_3_4"
@@ -172,14 +242,9 @@ def test_staged_spatial_timeout_waits_without_executing_placeholder(tmp_path):
                 return ProviderResult(
                     model=self.model, answers={"win_probability": NoulAnswer(noul=0.5)}
                 )
-            if "action" in request.questions:
-                action = next(
-                    key
-                    for key in request.questions["action"].criteria
-                    if key.startswith("spatial_move_unit_")
-                )
-                return ProviderResult(
-                    model=self.model, answers={"action": ChoiceAnswer(choice=action)}
+            if "spatial" not in request.questions:
+                return _action_result(
+                    request, lambda action_id: action_id.startswith("spatial_move_unit_")
                 )
             await asyncio.sleep(1)
             raise AssertionError("spatial timeout should cancel this request")
@@ -219,14 +284,9 @@ def test_agent_loop_resolves_group_spatial_action_end_to_end(tmp_path):
     class GroupSpatialProvider(SpatialProvider):
         async def decide(self, request):
             self.requests.append(request)
-            if "action" in request.questions:
-                action = next(
-                    key
-                    for key in request.questions["action"].criteria
-                    if key == "spatial_attack_group_all_combat"
-                )
-                return ProviderResult(
-                    model=self.model, answers={"action": ChoiceAnswer(choice=action)}
+            if "spatial" not in request.questions:
+                return _action_result(
+                    request, lambda action_id: action_id == "spatial_attack_group_all_combat"
                 )
             key = (
                 "region_7_6"
@@ -277,14 +337,9 @@ def test_spatial_decision_loop_budget_reserve_early_stop(tmp_path):
 
         async def decide(self, request):
             self.requests.append(request)
-            if "action" in request.questions:
-                action = next(
-                    key
-                    for key in request.questions["action"].criteria
-                    if key.startswith("spatial_move_unit_")
-                )
-                return ProviderResult(
-                    model=self.model, answers={"action": ChoiceAnswer(choice=action)}
+            if "spatial" not in request.questions:
+                return _action_result(
+                    request, lambda action_id: action_id.startswith("spatial_move_unit_")
                 )
             self.spatial_calls += 1
             await asyncio.sleep(0.02)

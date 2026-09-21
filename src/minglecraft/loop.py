@@ -43,10 +43,13 @@ def live_policy_instructions(map_name: str | None = None) -> str:
     return (
         f"You are playing StarCraft: Brood War v1.16.1 via BWAPI v4.4.0 (injected by Chaoslauncher){map_info}. "
         "Wire format: state uses 'jev/compact-v1'. state.candidate_actions contains available candidates with "
-        "columns [id, category, group, label, commands]. Each criteria key is an action id mapped to leaf:action_id. "
+        "columns [id, category, group, label, commands]. Choice questions form a tree: choose the action kind, "
+        "then the actual unit or unit group, then its executable command or target. Each criteria key is the exact "
+        "option ID for that node. A criteria value is a reference such as node:question_id or leaf:action_id. "
+        "All requested questions are evaluated independently in the same state; the program follows the selected "
+        "references to execute one leaf action. Answer every requested Choice with an existing option ID. "
         "Ground-coordinate candidates with null position or tile require subsequent coordinate choices; "
-        "they do not target the origin. Pick the single best action id from criteria to advance victory. "
-        "Return only the requested Choice answer."
+        "they do not target the origin. Return only the requested Choice answers."
     )
 
 
@@ -313,6 +316,7 @@ class AgentLoop:
             instructions=live_policy_instructions(obs.map_name)
             if (staged or self.single_stage)
             else POLICY_INSTRUCTIONS,
+            hierarchical=staged or self.single_stage,
         )
         choice_tree = {node: dict(options) for node, options in tree.nodes.items()}
         selected, path, reason, error = actions[0], [], None, None

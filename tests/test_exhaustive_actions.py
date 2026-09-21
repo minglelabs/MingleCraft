@@ -441,7 +441,7 @@ def test_choice_tree_hierarchical_split_guarantees_under_255_choices():
 
     from minglecraft.actions.hierarchy import MAX_CHOICES_PER_QUESTION, ChoiceTree
     from minglecraft.agents.providers import RandomProvider, RuleBasedProvider
-    from minglecraft.models import Action
+    from minglecraft.models import Action, Command
 
     # Create 350 candidate actions across different categories
     actions = [
@@ -455,6 +455,7 @@ def test_choice_tree_hierarchical_split_guarantees_under_255_choices():
                 group="workers",
                 label=f"Send worker {i} to mineral 1",
                 priority=100 if i == 1 else 10,
+                commands=(Command(kind="gather", unit_ids=(i,), target_id=1),),
             )
         )
     for i in range(150, 300):
@@ -465,6 +466,7 @@ def test_choice_tree_hierarchical_split_guarantees_under_255_choices():
                 group="combat",
                 label=f"Attack enemy 1 with unit {i}",
                 priority=50,
+                commands=(Command(kind="attack", unit_ids=(i,), target_id=1),),
             )
         )
     for i in range(300, 360):
@@ -475,6 +477,7 @@ def test_choice_tree_hierarchical_split_guarantees_under_255_choices():
                 group="buildings",
                 label=f"Build pylon with worker {i}",
                 priority=80,
+                commands=(Command(kind="build", unit_ids=(i,), target_id=1),),
             )
         )
 
@@ -491,12 +494,14 @@ def test_choice_tree_hierarchical_split_guarantees_under_255_choices():
     rule_result = asyncio.run(RuleBasedProvider().decide(tree.request))
     chosen_action, path = tree.resolve(rule_result)
     assert chosen_action.id == "gather_worker_1_mineral_1"
-    assert len(path) == 2
+    assert len(path) == 3
     assert path[0]["node"] == "category"
     assert path[0]["choice"] == "economy"
+    assert path[1]["choice"] == "unit_1"
+    assert path[-1]["choice"] == chosen_action.id
 
     # Test RandomProvider resolution
     rng_result = asyncio.run(RandomProvider(42).decide(tree.request))
     chosen_random, random_path = tree.resolve(rng_result)
     assert chosen_random in actions
-    assert len(random_path) == 2
+    assert len(random_path) == 3

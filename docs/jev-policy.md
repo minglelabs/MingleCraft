@@ -14,7 +14,7 @@ Direct Jev and OpenRouter Jev requests use `state.schema = "jev/compact-v1"`. Lo
 
 - Repeated entity and action objects become `columns` / `rows` tables. Every current observation field, supported legal action, and command parameter is preserved; baseline-only priority scores stay private.
 - Positions use `[x, y]`; command and construction-site rows have an explicit legend.
-- Choice criteria reference an action or another decision node instead of repeating every descendant action label at each hierarchy level. Labels and commands remain in the action table. Single-option branches remain reachable.
+- Choice questions use an action tree: action kind → actual unit or unit group → executable command or target. Criteria reference an action or another decision node instead of repeating every descendant action label at each hierarchy level. Labels and commands remain in the action table. Single-option branches remain reachable, and every Choice question stays below the provider's 255-choice limit.
 - The value request contains current state and every candidate but does not need the policy hierarchy. Policy receives the fresh estimate and the hierarchy. The two-call design is unchanged.
 - `value_request_bytes` and `policy_request_bytes` record compact UTF-8 request size. Logged request objects retain their readable local representation. API `usage.input_tokens` is the source for actual provider token counts; byte reduction does not guarantee equivalent token reduction.
 
@@ -76,8 +76,9 @@ win rates. A low forecast does not justify an illegal action or a blind attack;
 a high forecast does not justify ignoring defense or idle production.
 Re-evaluate immediate threats, uncertainty, economy, supply, and the supplied
 conditional strategy. Compare only this question's criteria. For child questions,
-assume the parent chose the branch described in the stage instructions. Other
-questions in this same call are independent and their answers are unavailable.
+use the supplied state and the branch described in that question's instructions.
+All questions in this same call are evaluated against the same state; the
+application follows the selected node references to one executable leaf action.
 Choose only an existing option ID. Code maps it to the exact BWAPI command;
 never generate a command or invent a target. Keep valid orders with wait when
 no new action is justified. Return only the requested Choice answer, with a
