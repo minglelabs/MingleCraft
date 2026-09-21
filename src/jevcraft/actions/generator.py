@@ -2,6 +2,9 @@ from collections import Counter
 
 from jevcraft.models import Action, Command, Observation, Position
 
+def _is_worker(u) -> bool:
+    return "SCV" in u.type or "Probe" in u.type or "Drone" in u.type or bool(u.can_gather) or bool(u.build_sites)
+
 
 class ActionGenerator:
     """Generate BWAPI-legal candidates for baseline or exhaustive Jev selection."""
@@ -16,7 +19,7 @@ class ActionGenerator:
         counts = Counter(u.type for u in obs.units)
         units = sorted(obs.units, key=lambda u: u.id)
         workers = [
-            u for u in units if u.type == "Terran_SCV" and u.completed and not u.constructing
+            u for u in units if _is_worker(u) and u.completed and not u.constructing
         ]
         minerals = {m.id: m for m in obs.mineral_patches}
         if "economy" in due:
@@ -62,17 +65,10 @@ class ActionGenerator:
                 if not u.completed or u.training:
                     continue
                 for kind in u.can_train:
-                    producer = (
-                        "Terran_Command_Center" if kind == "Terran_SCV" else "Terran_Barracks"
-                    )
-                    if (
-                        u.type != producer
-                        or obs.minerals < 50
-                        or obs.supply_used >= obs.supply_total
-                    ):
-                        continue
-                    priority = (75 if counts[kind] < 20 else 10) if kind == "Terran_SCV" else 60
-                    actions.append(
+                        if obs.minerals < 50 or obs.supply_used >= obs.supply_total:
+                            continue
+                        priority = 75 if counts[kind] < 20 else 50
+                        actions.append(
                         Action(
                             id=f"train_{u.id}_{kind}",
                             category="production",
@@ -88,16 +84,12 @@ class ActionGenerator:
             for u in sorted(workers, key=lambda u: (not u.idle, u.id)):
                 for site in u.build_sites:
                     key = (site.unit_type, site.tile.x, site.tile.y)
-                    cost = 100 if site.unit_type == "Terran_Supply_Depot" else 150
+                    cost = 100 if "Supply" in site.unit_type or "Pylon" in site.unit_type or "Overlord" in site.unit_type else 150
                     if key in sites or obs.minerals < cost:
-                        continue
-                    if site.unit_type == "Terran_Barracks" and not any(
-                        x.type == "Terran_Command_Center" and x.completed for x in units
-                    ):
                         continue
                     sites.add(key)
                     in_progress = any(x.type == site.unit_type and not x.completed for x in units)
-                    if site.unit_type == "Terran_Supply_Depot":
+                    if "Supply" in site.unit_type or "Pylon" in site.unit_type:
                         priority = (
                             95 if obs.supply_total - obs.supply_used <= 3 and not in_progress else 5
                         )
@@ -120,11 +112,11 @@ class ActionGenerator:
                             ),
                         )
                     )
-        marines = [u for u in units if u.type == "Terran_Marine" and u.completed]
+        combat_army = [u for u in units if u.completed and not u.constructing and not _is_worker(u) and (u.can_attack or u.can_move)]
         squads = {
-            "squad_1": [u for u in marines if u.id % 2 == 0],
-            "squad_2": [u for u in marines if u.id % 2 == 1],
-            "all_marines": marines,
+            "squad_1": [u for u in combat_army if u.id % 2 == 0][:200],
+            "squad_2": [u for u in combat_army if u.id % 2 == 1][:200],
+            "all_combat": combat_army[:200],
         }
         targets: list[tuple[str, Position]] = [
             (f"visible_{e.id}", e.position) for e in obs.enemies if e.visible
@@ -144,7 +136,7 @@ class ActionGenerator:
                             id=f"attack_{name}_{target}",
                             category="attack",
                             group=name,
-                            label=f"Attack-move {name} ({len(squad)} Marines) to {target}",
+            label=f"Attack-move {name} ({len(squad)} units) to {target}",
                             priority=50 if len(squad) >= 6 else 1,
                             commands=(
                                 Command(
@@ -159,7 +151,7 @@ class ActionGenerator:
                         id=f"retreat_{name}",
                         category="defense",
                         group=name,
-                        label=f"Retreat {name} ({len(squad)} Marines) to home",
+            label=f"Retreat {name} ({len(squad)} units) to home",
                         priority=90 if near_home and len(squad) < 6 else -1,
                         commands=(
                             Command(
@@ -174,7 +166,7 @@ class ActionGenerator:
                             id=f"defend_{name}",
                             category="defense",
                             group=name,
-                            label=f"Defend home with {name} ({len(squad)} Marines)",
+            label=f"Defend home with {name} ({len(squad)} units)",
                             priority=92 if near_home else -1,
                             commands=(
                                 Command(
@@ -216,12 +208,10 @@ class ActionGenerator:
         # The baseline intentionally keeps its historical shape, including one
         # aggregate marine action.  Bound its input here so an oversized observed
         # army cannot construct an invalid Command before exhaustive chunking.
-        marines = [unit for unit in obs.units if unit.type == "Terran_Marine"]
+        combat_army = [u for u in obs.units if u.completed and not u.constructing and not _is_worker(u) and (u.can_attack or u.can_move)]
         baseline_obs = obs
-        if len(marines) > 200:
-            bounded_units = tuple(
-                unit for unit in obs.units if unit.type != "Terran_Marine"
-            ) + tuple(marines[:200])
+        if len(combat_army) > 200:
+            bounded_units = tuple(u for u in obs.units if u not in combat_army) + tuple(combat_army[:200])
             baseline_obs = obs.model_copy(update={"units": bounded_units})
         baseline = self._generate_baseline(baseline_obs, due)
         actions = [
@@ -234,7 +224,7 @@ class ActionGenerator:
         workers = [
             unit
             for unit in units
-            if unit.type == "Terran_SCV" and unit.completed and not unit.constructing
+            if (unit.can_gather or unit.build_sites or "SCV" in unit.type or "Probe" in unit.type or "Drone" in unit.type) and unit.completed and not unit.constructing
         ]
         minerals = {mineral.id: mineral for mineral in obs.mineral_patches}
 
@@ -288,15 +278,10 @@ class ActionGenerator:
                     )
 
         if "construction" in due:
-            has_command_center = any(
-                unit.type == "Terran_Command_Center" and unit.completed for unit in units
-            )
             for worker in workers:
                 for site in worker.build_sites:
-                    cost = 100 if site.unit_type == "Terran_Supply_Depot" else 150
+                    cost = 100 if "Supply" in site.unit_type or "Pylon" in site.unit_type or "Overlord" in site.unit_type else 150
                     if obs.minerals < cost:
-                        continue
-                    if site.unit_type == "Terran_Barracks" and not has_command_center:
                         continue
                     add(
                         Action(
@@ -351,7 +336,6 @@ class ActionGenerator:
             for unit in units
             if unit.completed
             and not unit.constructing
-            and unit.type in {"Terran_Marine", "Terran_SCV"}
             and (unit.can_move or unit.can_attack)
         ]
         if "defense" in due or "attack" in due:
@@ -399,11 +383,11 @@ class ActionGenerator:
                             )
                         )
 
-        marines = [unit for unit in units if unit.type == "Terran_Marine" and unit.completed]
+        combat_army = [unit for unit in units if unit.completed and not unit.constructing and not _is_worker(unit) and (unit.can_attack or unit.can_move)]
         squads = {
-            "squad_1": [unit for unit in marines if unit.id % 2 == 0],
-            "squad_2": [unit for unit in marines if unit.id % 2 == 1],
-            "all_marines": marines,
+            "squad_1": [unit for unit in combat_army if unit.id % 2 == 0],
+            "squad_2": [unit for unit in combat_army if unit.id % 2 == 1],
+            "all_combat": combat_army,
         }
         squad_targets = [*visible_targets, *start_targets, ("home", obs.home)]
         if "attack" in due or "defense" in due:
@@ -422,7 +406,7 @@ class ActionGenerator:
                                     id=f"attack_{group}_{target}",
                                     category="attack",
                                     group=group,
-                                    label=f"Attack-move {group} ({len(chunk)} Marines) to {target}",
+                                    label=f"Attack-move {group} ({len(chunk)} units) to {target}",
                                     commands=(
                                         Command(kind="attack", unit_ids=ids, position=position),
                                     ),
@@ -434,7 +418,7 @@ class ActionGenerator:
                                 id=f"retreat_{group}",
                                 category="defense",
                                 group=group,
-                                label=f"Retreat {group} ({len(chunk)} Marines) to home",
+                                label=f"Retreat {group} ({len(chunk)} units) to home",
                                 commands=(Command(kind="move", unit_ids=ids, position=obs.home),),
                             )
                         )

@@ -16,6 +16,12 @@ json tilePosition(TilePosition p) { return {{"x", p.x}, {"y", p.y}}; }
 
 class Bridge final : public AIModule {
   std::future<json> pending;
+  static UnitType findUnitType(const std::string& name) {
+    for (auto type : UnitTypes::allUnitTypes()) {
+      if (type.getName() == name) return type;
+    }
+    return UnitTypes::Unknown;
+  }
   std::string match;
   bool active = false;
   int lastSent = -6;
@@ -27,6 +33,7 @@ class Bridge final : public AIModule {
 
   json snapshot() {
     auto self = Broodwar->self();
+    auto enemy = Broodwar->enemy();
     auto homeTile = self->getStartLocation();
     auto home = Position(homeTile) + Position(64, 48);
     json own = json::array(), enemies = json::array(), minerals = json::array(), locations = json::array();
@@ -38,7 +45,12 @@ class Bridge final : public AIModule {
       }
     }
     std::vector<std::pair<UnitType, TilePosition>> sites;
-    for (auto type : {UnitTypes::Terran_Supply_Depot, UnitTypes::Terran_Barracks}) {
+    std::vector<UnitType> buildingTypes = {
+      UnitTypes::Terran_Supply_Depot, UnitTypes::Terran_Barracks,
+      UnitTypes::Protoss_Pylon, UnitTypes::Protoss_Gateway,
+      UnitTypes::Zerg_Spawning_Pool
+    };
+    for (auto type : buildingTypes) {
       auto tile = Broodwar->getBuildLocation(type, homeTile, 24);
       if (tile.isValid()) sites.push_back({type, tile});
     }
@@ -46,10 +58,10 @@ class Bridge final : public AIModule {
       if (!u->exists() || !u->getPosition().isValid()) continue;
       json trains = json::array(), gathers = json::array(), builds = json::array();
       if (u->isCompleted() && !u->isTraining()) {
-        for (auto type : {UnitTypes::Terran_SCV, UnitTypes::Terran_Marine})
+        for (auto type : {UnitTypes::Terran_SCV, UnitTypes::Terran_Marine, UnitTypes::Protoss_Probe, UnitTypes::Protoss_Zealot, UnitTypes::Zerg_Drone, UnitTypes::Zerg_Zergling, UnitTypes::Zerg_Overlord})
           if (u->canTrain(type)) trains.push_back(type.getName());
       }
-      if (u->getType() == UnitTypes::Terran_SCV && !u->isConstructing()) {
+      if (u->getType().isWorker() && !u->isConstructing()) {
         for (auto patch : patches) if (u->canGather(patch)) gathers.push_back(patch->getID());
         for (auto site : sites) if (u->canBuild(site.first, site.second))
           builds.push_back({{"unit_type", site.first.getName()}, {"tile", tilePosition(site.second)}});
@@ -78,7 +90,7 @@ class Bridge final : public AIModule {
     return {
       {"protocol_version", 1}, {"match_id", match}, {"frame", Broodwar->getFrameCount()},
       {"map_name", Broodwar->mapFileName()}, {"map_hash", Broodwar->mapHash()},
-      {"self_race", "Terran"}, {"enemy_race", "Terran"},
+      {"self_race", self->getRace().getName()}, {"enemy_race", enemy ? enemy->getRace().getName() : "Unknown"},
       {"complete_map_information", Broodwar->isFlagEnabled(Flag::CompleteMapInformation)},
       {"minerals", self->minerals()}, {"gas", self->gas()},
       {"supply_used", self->supplyUsed() / 2}, {"supply_total", self->supplyTotal() / 2},
@@ -122,15 +134,15 @@ class Bridge final : public AIModule {
           bool valid = false;
           if (kind == "train") {
             const auto typeName = command.at("unit_type").get<std::string>();
-            auto type = typeName == "Terran_SCV" ? UnitTypes::Terran_SCV : UnitTypes::Terran_Marine;
-            valid = (typeName == "Terran_SCV" || typeName == "Terran_Marine") && !unit->isTraining() && unit->canTrain(type);
+            auto type = findUnitType(typeName);
+            valid = type != UnitTypes::None && type != UnitTypes::Unknown && !unit->isTraining() && unit->canTrain(type);
             action = UnitCommand::train(unit, type);
           } else if (kind == "build") {
             const auto typeName = command.at("unit_type").get<std::string>();
-            auto type = typeName == "Terran_Supply_Depot" ? UnitTypes::Terran_Supply_Depot : UnitTypes::Terran_Barracks;
+            auto type = findUnitType(typeName);
             TilePosition tile(command.at("tile").at("x").get<int>(), command.at("tile").at("y").get<int>());
-            valid = (typeName == "Terran_Supply_Depot" || typeName == "Terran_Barracks") &&
-                    tile.isValid() && unit->getType() == UnitTypes::Terran_SCV && !unit->isConstructing() && unit->canBuild(type, tile);
+            valid = type != UnitTypes::None && type != UnitTypes::Unknown &&
+                    tile.isValid() && unit->getType().isWorker() && !unit->isConstructing() && unit->canBuild(type, tile);
             action = UnitCommand::build(unit, tile, type);
           } else if (kind == "gather") {
             auto target = Broodwar->getUnit(command.at("target_id").get<int>());
@@ -165,10 +177,9 @@ public:
     active = false;
     auto self = Broodwar->self();
     auto enemy = Broodwar->enemy();
-    if (Broodwar->isReplay() || !self || !enemy || self->getRace() != Races::Terran ||
-        enemy->getRace() != Races::Terran || Broodwar->enemies().size() != 1 ||
+    if (Broodwar->isReplay() || !self || !enemy || Broodwar->enemies().size() != 1 ||
         Broodwar->isFlagEnabled(Flag::CompleteMapInformation)) {
-      Broodwar->printf("JevCraft requires a non-cheating 1v1 Terran vs Terran game.");
+      Broodwar->printf("JevCraft requires a non-cheating 1v1 game.");
       return;
     }
     auto now = std::chrono::system_clock::now().time_since_epoch();

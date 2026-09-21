@@ -4,9 +4,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-TrainType = Literal["Terran_SCV", "Terran_Marine"]
-BuildType = Literal["Terran_Supply_Depot", "Terran_Barracks"]
-Category = Literal["economy", "production", "construction", "attack", "defense", "scout", "wait"]
+TrainType = str
+BuildType = str
+Category = str
 
 
 class Model(BaseModel):
@@ -89,8 +89,8 @@ class Observation(Model):
     frame: int = Field(ge=0)
     map_name: str = Field(min_length=1, max_length=256)
     map_hash: str = Field(min_length=1, max_length=128)
-    self_race: Literal["Terran"] = "Terran"
-    enemy_race: Literal["Terran"] = "Terran"
+    self_race: str = "Terran"
+    enemy_race: str = "Terran"
     complete_map_information: Literal[False] = False
     minerals: int = Field(ge=0)
     gas: int = Field(ge=0)
