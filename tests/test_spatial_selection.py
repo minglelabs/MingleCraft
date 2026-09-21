@@ -213,3 +213,35 @@ def test_tiny_map_regions_only_include_nonempty_cells():
     assert {spec.region_bounds(*parse_region_key(key)) for key in regions.criteria} == {
         (x, y, x + 1, y + 1) for x in range(3) for y in range(2)
     }
+
+
+def test_agent_loop_resolves_group_spatial_action_end_to_end(tmp_path):
+    class GroupSpatialProvider(SpatialProvider):
+        async def decide(self, request):
+            self.requests.append(request)
+            if "action" in request.questions:
+                action = next(
+                    key
+                    for key in request.questions["action"].criteria
+                    if key == "spatial_attack_group_all_combat"
+                )
+                return ProviderResult(
+                    model=self.model, answers={"action": ChoiceAnswer(choice=action)}
+                )
+            key = (
+                "region_7_6"
+                if "region_7_6" in request.questions["spatial"].criteria
+                else "refine_3_4"
+            )
+            return ProviderResult(model=self.model, answers={"spatial": ChoiceAnswer(choice=key)})
+
+    provider = GroupSpatialProvider()
+    loop = AgentLoop(provider, tmp_path, single_stage=True, deadline_ms=5000)
+    obs = SyntheticGame("spatial_group").observe()
+    # Ensure we have multiple combat units so all_combat exists
+    decision = asyncio.run(loop.step(obs))
+
+    assert decision.action_id == "spatial_attack_group_all_combat"
+    assert len(decision.commands[0].unit_ids) > 1
+    assert decision.commands[0].kind == "attack"
+    assert decision.commands[0].position.model_dump() == {"x": 3803, "y": 3363}
