@@ -174,16 +174,24 @@ class AgentLoop:
         staged = bool(getattr(self.provider, "supports_value", False))
         if self.single_stage:
             staged = False
-        due = set(Scheduler.periods) if staged else self.scheduler.due(obs.frame)
+        due = (
+            set(Scheduler.periods)
+            if (staged or self.single_stage)
+            else self.scheduler.due(obs.frame)
+        )
         actions = (
             self.generator.generate(obs, due, exhaustive=True)
             if staged
+            else prune(self.generator.generate(obs, due, exhaustive=True), self.limit)
+            if self.single_stage
             else prune(self.generator.generate(obs, due), self.limit)
         )
         tree = ChoiceTree(
             state,
             actions,
-            instructions=LIVE_POLICY_INSTRUCTIONS if staged else POLICY_INSTRUCTIONS,
+            instructions=LIVE_POLICY_INSTRUCTIONS
+            if (staged or self.single_stage)
+            else POLICY_INSTRUCTIONS,
         )
         choice_tree = {node: dict(options) for node, options in tree.nodes.items()}
         selected, path, reason, error = actions[0], [], None, None
