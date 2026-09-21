@@ -25,22 +25,7 @@ than anchoring on those estimates; the current estimate does not exist yet.
 This is an uncalibrated forecast until validated against actual match outcomes.
 """
 
-POLICY_INSTRUCTIONS = """Select the legal option that best advances our eventual
-chance of winning under `strategy_policy`, using `observation`, every supplied
-`candidate_actions` entry, and complete timestamped `match_history`.
-Read history observation deltas chronologically; unchanged fields carry forward
-and replaced lists replace their previous contents. Distinguish sightings from
-hypotheses, issued commands from receipts, and acceptance from observed effects.
-The current `latest_value` is this observation's value-stage forecast. Historical
-forecasts are estimates, not fresh scouting, independent evidence, or measured
-win rates. A low forecast does not justify an illegal action or a blind attack;
-a high forecast does not justify ignoring defense or idle production.
-Re-evaluate immediate threats, uncertainty, economy, supply, and the supplied
-conditional strategy. Compare only this question's criteria. For child questions,
-assume the parent chose the branch described in the stage instructions. Other
-questions in this same call are independent and their answers are unavailable.
-Choose only an existing option ID. Code maps it to the exact BWAPI command;
-never generate a command or invent a target. Keep valid orders with wait when
-no new action is justified. Return only the requested Choice answer, with a
-probability for every option and confidence based on evidence.
-"""
+POLICY_INSTRUCTIONS = (
+    "You are playing StarCraft: Brood War. Pick the single best action "
+    "from the candidates in criteria. Return only the requested Choice answer."
+)

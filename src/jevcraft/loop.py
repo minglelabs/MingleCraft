@@ -20,7 +20,7 @@ from jevcraft.strategy.policy import POLICY_INSTRUCTIONS, SHARED_POLICY
 from jevcraft.strategy.scheduler import Scheduler
 
 LIVE_VALUE_INSTRUCTIONS = "Estimate the chance of ultimately winning from the supplied game state. Return only the requested Noul probability."
-LIVE_POLICY_INSTRUCTIONS = "Choose the existing option that best advances victory. Prioritize spending idle minerals on SCVs and Supply Depots when available. Return only the requested Choice answer."
+LIVE_POLICY_INSTRUCTIONS = "You are playing StarCraft: Brood War. Pick the single best action from the candidates. Return only the requested Choice answer."
 
 
 class AgentLoop:

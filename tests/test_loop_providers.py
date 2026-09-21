@@ -283,7 +283,7 @@ def test_compact_payload_round_trips_facts_commands_and_every_leaf(observation):
             node: ChoiceAnswer(choice=next(iter(question.criteria)))
             for node, question in tree.request.questions.items()
         }
-        for node, choice in path("domain", target):
+        for node, choice in path("action", target):
             if node in answers:
                 answers[node] = ChoiceAnswer(choice=choice)
         selected, _ = tree.resolve(ProviderResult(model="jev-test", answers=answers))
@@ -293,7 +293,7 @@ def test_compact_payload_round_trips_facts_commands_and_every_leaf(observation):
         wire_tree = payload["state"]["choice_tree"]
         wire_actions = {row["id"]: row for row in table(payload["state"]["candidate_actions"])}
         wire_command_rows = None
-        for node, choice in path("domain", target):
+        for node, choice in path("action", target):
             options = (
                 wire_questions[node]["criteria"] if node in wire_questions else wire_tree[node]
             )

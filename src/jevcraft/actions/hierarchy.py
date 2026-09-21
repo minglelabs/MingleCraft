@@ -1,12 +1,11 @@
 import math
-from collections import defaultdict
 
 from jevcraft.models import Action, ChoiceQuestion, DecisionRequest, ProviderResult
 from jevcraft.strategy.policy import POLICY_INSTRUCTIONS
 
 
 class ChoiceTree:
-    """Domain -> squad/producer group -> concrete action, batched in one call."""
+    """Flat single-question tree: one question with every candidate action."""
 
     def __init__(
         self,
@@ -15,48 +14,20 @@ class ChoiceTree:
         instructions: str = POLICY_INSTRUCTIONS,
     ):
         self.actions = {a.id: a for a in actions}
-        self.nodes: dict[str, dict[str, str]] = {}
-        self.priorities: dict[str, dict[str, float]] = {}
-        categories = defaultdict(lambda: defaultdict(list))
-        for action in actions:
-            categories[action.category][action.group].append(action)
-        self.nodes["domain"] = {}
-        self.priorities["domain"] = {}
-        for category, groups in categories.items():
-            domain = f"group_{category}"
-            self.nodes["domain"][category] = domain
-            self.priorities["domain"][category] = max(
-                a.priority for g in groups.values() for a in g
-            )
-            self.nodes[domain] = {}
-            self.priorities[domain] = {}
-            for group, candidates in groups.items():
-                node = f"action_{category}_{group}"
-                self.nodes[domain][group] = node
-                self.priorities[domain][group] = max(a.priority for a in candidates)
-                self.nodes[node] = {a.id: f"leaf:{a.id}" for a in candidates}
-                self.priorities[node] = {a.id: a.priority for a in candidates}
-        request_state = dict(state)
+        self.nodes = {"action": {a.id: f"leaf:{a.id}" for a in actions}}
+        self.priorities = {"action": {a.id: a.priority for a in actions}}
         questions = {}
-        for node, options in self.nodes.items():
-            if len(options) <= 1:
-                continue
-            criteria = {}
-            for option, child in options.items():
-                leaves = self.descendants(child)
-                criteria[option] = "; ".join(self.actions[a].label for a in leaves)
-            questions[node] = ChoiceQuestion(
-                instructions=(
-                    instructions + f"\nChoose exactly one option at stage {node}. "
-                    "Evaluate this stage assuming its parent has selected it."
-                ),
+        if len(actions) > 1:
+            criteria = {a.id: a.label for a in actions}
+            questions["action"] = ChoiceQuestion(
+                instructions=instructions,
                 criteria=criteria,
             )
         self.request = DecisionRequest(
-            state=request_state,
+            state=dict(state),
             questions=questions,
-            choice_tree={node: dict(options) for node, options in self.nodes.items()},
-            priorities={k: self.priorities[k] for k in questions},
+            choice_tree={"action": {a.id: f"leaf:{a.id}" for a in actions}},
+            priorities={"action": self.priorities["action"]} if questions else {},
         )
 
     def descendants(self, child: str) -> list[str]:
@@ -65,7 +36,6 @@ class ChoiceTree:
         return [leaf for sub in self.nodes[child].values() for leaf in self.descendants(sub)]
 
     def resolve(self, result: ProviderResult) -> tuple[Action, list[dict]]:
-        # Validate all reported answers, including speculative branches.
         if set(result.answers) != set(self.request.questions):
             raise ValueError("Provider answer IDs do not match the request")
         for node, answer in result.answers.items():
@@ -82,13 +52,11 @@ class ChoiceTree:
                     raise ValueError("Invalid probability")
                 if not math.isclose(sum(probabilities.values()), 1, abs_tol=0.01):
                     raise ValueError("Probabilities must sum to one")
-        node, path = "domain", []
-        while not node.startswith("leaf:"):
-            options = self.nodes[node]
-            answer = result.answers.get(node)
-            choice = answer.choice if answer else next(iter(options))
-            path.append(
-                {"node": node, "choice": choice, "answer": answer.model_dump() if answer else None}
-            )
-            node = options[choice]
-        return self.actions[node[5:]], path
+        answer = result.answers.get("action")
+        if answer:
+            choice = answer.choice
+            path = [{"node": "action", "choice": choice, "answer": answer.model_dump()}]
+        else:
+            choice = next(iter(self.nodes["action"]))
+            path = [{"node": "action", "choice": choice, "answer": None}]
+        return self.actions[choice], path

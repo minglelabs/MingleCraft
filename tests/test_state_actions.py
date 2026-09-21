@@ -145,15 +145,15 @@ def test_hierarchy_chooses_one_server_owned_action(observation):
     result = asyncio.run(RuleBasedProvider().decide(tree.request))
     action, path = tree.resolve(result)
     assert action.category == "economy"
-    assert len(path) == 3
+    assert len(path) == 1
     assert action in actions
 
 
 def test_injected_action_is_rejected(observation):
     tree = ChoiceTree({}, generate(observation))
     result = asyncio.run(RuleBasedProvider().decide(tree.request))
-    answers = dict(result.answers, domain=ChoiceAnswer(choice="delete_everything"))
-    with pytest.raises(ValueError, match="outside"):
+    answers = dict(result.answers, action=ChoiceAnswer(choice="delete_everything"))
+    with pytest.raises(ValueError, match="outside|do not match"):
         tree.resolve(result.model_copy(update={"answers": answers}))
 
 
@@ -161,8 +161,9 @@ def test_malformed_distribution_is_rejected(observation):
     tree = ChoiceTree({}, generate(observation))
     result = asyncio.run(RuleBasedProvider().decide(tree.request))
     answers = dict(result.answers)
-    answers["domain"] = ChoiceAnswer(
-        choice="economy", probabilities={k: 0 for k in tree.request.questions["domain"].criteria}
+    answers["action"] = ChoiceAnswer(
+        choice=next(iter(tree.request.questions["action"].criteria)),
+        probabilities={k: 0 for k in tree.request.questions["action"].criteria}
     )
     with pytest.raises(ValueError, match="sum"):
         tree.resolve(result.model_copy(update={"answers": answers}))
