@@ -1,6 +1,9 @@
 import asyncio
 import json
 
+import httpx
+
+from minglecraft.agents import JevProvider
 from minglecraft.loop import AgentLoop
 from minglecraft.models import Action, ChoiceAnswer, NoulAnswer, ProviderResult, Receipt
 from minglecraft.state.history import MatchHistory
@@ -46,15 +49,20 @@ def test_jev_value_then_policy_has_fresh_value_and_history(observation, tmp_path
     )
     asyncio.run(loop.step(next_observation))
 
-    assert len(provider.requests) == 4
-    value, policy, value2, policy2 = provider.requests
-    assert list(value.questions) == ["win_probability"]
-    assert "latest_value" not in value.state or value.state["latest_value"] is None
-    assert policy.state["latest_value"] == {"frame": 0, "win_probability": 0.63}
-    assert "choice_tree" not in value.state
-    assert "choice_tree" in policy.state
-    assert "match_history" not in value.state
-    assert "match_history" not in policy2.state
+    values = [r for r in provider.requests if "win_probability" in r.questions]
+    policies = [r for r in provider.requests if "command_kind" in r.questions]
+    assert len(values) == 2
+    assert len(policies) == 2
+    assert "latest_value" not in values[0].state or values[0].state["latest_value"] is None
+    assert policies[0].state["latest_value"] == {"frame": 0, "win_probability": 0.63}
+    assert "choice_tree" not in values[0].state
+    # The model-facing compact wire encoding carries the selected node criteria;
+    # it does not dump the complete tree into state.
+    assert "choice_tree" not in policies[0].state
+    assert policies[0].choice_tree is not None
+    assert len(policies[0].choice_tree) <= 1
+    assert "match_history" not in values[0].state
+    assert "match_history" not in policies[1].state
     history = loop.history.snapshot()
     assert any(record["event"] == "issued_action" for record in history)
     assert all(
@@ -63,8 +71,8 @@ def test_jev_value_then_policy_has_fresh_value_and_history(observation, tmp_path
         if record["event"] == "observation" and "enemies" in record["observation_delta"]
         for enemy in record["observation_delta"]["enemies"]
     )
-    assert "strategy_policy" not in policy.state
-    assert "strategy_policy" not in value.state
+    assert "strategy_policy" not in policies[0].state
+    assert "strategy_policy" not in values[0].state
 
 
 def test_policy_failure_keeps_value_usage_and_sanitizes_error(observation, tmp_path):
@@ -96,11 +104,15 @@ def test_jev_sends_all_exhaustive_candidates(observation, tmp_path):
 
     loop.generator.generate = generate
     asyncio.run(loop.step(observation))
-    assert len(provider.requests[0].state["candidate_actions"]) == 61
-    assert len(provider.requests[1].state["candidate_actions"]) == 61
+    # Value request strips candidate_actions to prevent context overflow
+    assert len(provider.requests[0].state["candidate_actions"]) == 0
     policy = provider.requests[1]
     assert policy.choice_tree is not None
-    assert "category" in policy.questions
+    assert policy.questions
+    assert set(policy.questions).issubset(policy.choice_tree or {})
+    # Only the selected node's direct leaves are exposed; descendants of other
+    # branches are never dumped into this request.
+    assert len(policy.state["candidate_actions"]) == 61
     assert all(len(question.criteria) <= 200 for question in policy.questions.values())
 
 
@@ -110,7 +122,7 @@ def test_request_size_guard_sends_nothing_and_keeps_history_intact(observation, 
 
     result = asyncio.run(loop.step(observation))
 
-    assert result.fallback_reason == "request_size_guard"
+    assert result.fallback_reason == "context_budget_exceeded"
     assert provider.requests == []
     assert len(loop.history.snapshot()) == 2
     loop.finish(observation)
@@ -137,6 +149,77 @@ def test_policy_timeout_is_logged_after_value_success(observation, tmp_path):
     assert result.fallback_reason == "deadline"
     assert [call["stage"] for call in record["calls"]] == ["value", "policy"]
     assert record["value_result"]["answers"]["win_probability"]["noul"] == 0.63
+
+
+def test_http_value_failure_is_one_attempted_call_and_policy_continues(observation, tmp_path):
+    def respond(request):
+        payload = json.loads(request.content)
+        if "win_probability" in payload["questions"]:
+            return httpx.Response(503, json={"error": "value unavailable"})
+        question_id, question = next(iter(payload["questions"].items()))
+        choice = next(iter(question["criteria"]))
+        return httpx.Response(
+            200,
+            json={
+                "model": "jev-latest",
+                "answers": {
+                    question_id: {
+                        "type": "choice",
+                        "choice": choice,
+                        "confidence": 1,
+                        "probabilities": {key: float(key == choice) for key in question["criteria"]},
+                    }
+                },
+            },
+        )
+
+    provider = JevProvider("test-key", transport=httpx.MockTransport(respond))
+    loop = AgentLoop(provider, tmp_path, deadline_ms=5000)
+    asyncio.run(loop.step(observation))
+    record = json.loads((tmp_path / "test_match" / "decisions.jsonl").read_text().splitlines()[0])
+    assert record["calls"][0]["stage"] == "value"
+    assert record["calls"][0]["sent"] is True
+    assert record["calls"][0]["error"] == "HTTPStatusError"
+    assert record["calls"][1]["stage"] == "policy"
+
+
+def test_http_second_policy_failure_is_logged_separately(observation, tmp_path):
+    policy_calls = 0
+
+    def respond(request):
+        nonlocal policy_calls
+        payload = json.loads(request.content)
+        if "win_probability" in payload["questions"]:
+            return httpx.Response(200, json={"model": "jev-latest", "answers": {"win_probability": {"type": "noul", "noul": 0.5}}})
+        policy_calls += 1
+        if policy_calls == 2:
+            return httpx.Response(502, json={"error": "policy unavailable"})
+        question_id, question = next(iter(payload["questions"].items()))
+        choice = next(iter(question["criteria"]))
+        return httpx.Response(
+            200,
+            json={
+                "model": "jev-latest",
+                "answers": {
+                    question_id: {
+                        "type": "choice",
+                        "choice": choice,
+                        "confidence": 1,
+                        "probabilities": {key: float(key == choice) for key in question["criteria"]},
+                    }
+                },
+            },
+        )
+
+    provider = JevProvider("test-key", transport=httpx.MockTransport(respond))
+    loop = AgentLoop(provider, tmp_path, deadline_ms=5000)
+    asyncio.run(loop.step(observation))
+    record = json.loads((tmp_path / "test_match" / "decisions.jsonl").read_text().splitlines()[0])
+    policy_records = [call for call in record["calls"] if call["stage"] == "policy"]
+    assert len(policy_records) == 2
+    assert all(call["sent"] is True for call in policy_records)
+    assert policy_records[1]["error"] == "HTTPStatusError"
+    assert record["query_count"] == 3
 
 
 def test_history_deduplicates_receipts_and_preserves_timestamped_deltas(observation):

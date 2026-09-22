@@ -554,8 +554,8 @@ def test_choice_tree_hierarchical_split_guarantees_under_255_choices():
     chosen_action, path = tree.resolve(rule_result)
     assert chosen_action.id == "gather_worker_1_mineral_1"
     assert len(path) == 3
-    assert path[0]["node"] == "category"
-    assert path[0]["choice"] == "economy"
+    assert path[0]["node"] == "command_kind"
+    assert path[0]["choice"] == "gather"
     assert path[1]["choice"] == "unit_1"
     assert path[-1]["choice"] == chosen_action.id
 

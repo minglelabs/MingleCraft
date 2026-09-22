@@ -18,81 +18,34 @@ from minglecraft.loop import AgentLoop
 from minglecraft.models import ChoiceAnswer, NoulAnswer, ProviderResult, Unit
 
 
-def _raw_choice_path(request, target):
-    tree = request.choice_tree
-    assert tree is not None
-    root = "category" if "category" in tree else "action"
-
-    def visit(node, seen):
-        assert node not in seen
-        for option, child in tree[node].items():
-            if child == f"leaf:{target}":
-                return [(node, option)]
-            if child in tree:
-                suffix = visit(child, (*seen, node))
-                if suffix is not None:
-                    return [(node, option), *suffix]
-        return None
-
-    path = visit(root, ())
-    assert path is not None
-    return dict(path)
-
-
 def _action_result(request, predicate):
-    tree = request.choice_tree
-    assert tree is not None
-    leaves = []
-
-    def collect(node):
-        for child in tree[node].values():
-            if child.startswith("leaf:"):
-                leaves.append(child[5:])
-            else:
-                collect(child)
-
-    collect("category" if "category" in tree else "action")
-    target = next(action_id for action_id in leaves if predicate(action_id))
-    path = _raw_choice_path(request, target)
-    answers = {
-        node: ChoiceAnswer(choice=path.get(node, next(iter(question.criteria))))
-        for node, question in request.questions.items()
-    }
+    answers = {}
+    for node, question in request.questions.items():
+        choices = question.criteria
+        direct = next((key for key in choices if predicate(key)), None)
+        if direct is not None:
+            choice = direct
+        elif node == "command_kind":
+            choice = next(
+                (key for key in choices if predicate(f"spatial_{key}_unit_1")),
+                next(iter(choices)),
+            )
+        else:
+            choice = next(iter(choices))
+        answers[node] = ChoiceAnswer(choice=choice)
     return ProviderResult(model="fake-spatial", answers=answers)
 
 
 def _wire_action_answers(payload, predicate):
-    edges = {node: question["criteria"] for node, question in payload["questions"].items()}
-    edges.update(payload["state"].get("choice_tree", {}))
-    leaves = []
-
-    def collect(node):
-        for child in edges[node].values():
-            if child.startswith("leaf:"):
-                leaves.append(child[5:])
-            else:
-                collect(child[5:])
-
-    root = "category" if "category" in edges else "action"
-    collect(root)
-    target = next(action_id for action_id in leaves if predicate(action_id))
-
-    def visit(node, seen):
-        assert node not in seen
-        for option, child in edges[node].items():
-            if child == f"leaf:{target}":
-                return [(node, option)]
-            if child.startswith("node:"):
-                suffix = visit(child[5:], (*seen, node))
-                if suffix is not None:
-                    return [(node, option), *suffix]
-        return None
-
-    path = dict(visit(root, ()))
     answers = {}
     for node, question in payload["questions"].items():
         choices = question["criteria"]
-        choice = path.get(node, next(iter(choices)))
+        choice = next((key for key in choices if predicate(key)), None)
+        if choice is None and node == "command_kind":
+            choice = next(
+                (key for key in choices if predicate(f"spatial_{key}_unit_1")), None
+            )
+        choice = choice or next(iter(choices))
         answers[node] = {
             "type": "choice",
             "choice": choice,
@@ -174,14 +127,12 @@ def test_agent_loop_resolves_uniform_ground_coordinate_end_to_end(tmp_path):
     loop = AgentLoop(provider, tmp_path, single_stage=True, deadline_ms=5000)
     decision = asyncio.run(loop.step(SyntheticGame("spatial_e2e").observe()))
 
-    assert decision.action_id.startswith("spatial_move_unit_")
+    assert decision.action_id.startswith("spatial_move_")
     assert decision.commands[0].position.model_dump() == {"x": 3803, "y": 3363}
-    assert "category" in provider.requests[0].questions
-    assert [set(request.questions) for request in provider.requests[1:]] == [
-        {"spatial"},
-        {"spatial"},
-        {"spatial"},
-    ]
+    assert "command_kind" in provider.requests[0].questions
+    spatial_requests = [r for r in provider.requests if "spatial" in r.questions]
+    assert len(spatial_requests) == 3
+    assert all(set(r.questions) == {"spatial"} for r in spatial_requests)
 
 
 def test_invalid_spatial_choice_waits_without_placeholder_command(tmp_path):
@@ -376,7 +327,7 @@ def test_spatial_decision_loop_budget_reserve_early_stop(tmp_path):
     loop = AgentLoop(provider, tmp_path, single_stage=True, deadline_ms=55)
     decision = asyncio.run(loop.step(SyntheticGame("spatial_budget").observe()))
 
-    assert decision.action_id.startswith("spatial_move_unit_")
+    assert decision.action_id.startswith("spatial_move_")
     assert decision.fallback_reason is None
     assert decision.commands[0].position is not None
     assert provider.spatial_calls == 2

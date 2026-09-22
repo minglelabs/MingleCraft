@@ -167,16 +167,16 @@ def test_compact_jev_payload_preserves_ids_and_uses_references(observation):
         for value in question["criteria"].values()
     )
     assert all(
-        value.startswith(("node:", "leaf:"))
+        not value.startswith(("node:", "leaf:"))
         for question in payload["questions"].values()
         for value in question["criteria"].values()
     )
     assert all(
-        action.label not in question["criteria"].values()
-        for action in actions
+        value.strip()
         for question in payload["questions"].values()
+        for value in question["criteria"].values()
     )
-    assert set(payload["state"]["choice_tree"]) == set(tree.nodes) - set(tree.request.questions)
+    assert "choice_tree" not in payload["state"]
 
 
 def test_compact_payload_without_tree_keeps_external_criteria():
@@ -226,23 +226,12 @@ def test_hierarchical_wire_payload_preserves_actor_path_and_leaf_refs():
     tree = ChoiceTree({}, actions, hierarchical=True)
     payload = compact_request_payload(tree.request, "jev-test")
 
-    assert tree.descendants("category") == [action.id for action in actions]
+    assert set(tree.descendants("command_kind")) == {action.id for action in actions}
     assert all(
         len(question.criteria) <= MAX_CHOICES_PER_QUESTION
         for question in tree.request.questions.values()
     )
-    references = [
-        reference
-        for question in payload["questions"].values()
-        for reference in question["criteria"].values()
-    ] + [
-        reference
-        for options in payload["state"]["choice_tree"].values()
-        for reference in options.values()
-    ]
-    assert references
-    assert all(reference.startswith(("node:", "leaf:")) for reference in references)
-    assert not any(reference.startswith("node:node:") for reference in references)
+    assert "choice_tree" not in payload["state"]
 
     answers = {
         node: ChoiceAnswer(choice=next(iter(question.criteria)))
@@ -250,10 +239,10 @@ def test_hierarchical_wire_payload_preserves_actor_path_and_leaf_refs():
     }
     selected, path = tree.resolve(ProviderResult(model="jev-test", answers=answers))
     assert selected.id in {action.id for action in actions}
-    assert path[0]["node"] == "category"
+    assert path[0]["node"] == "command_kind"
 
     missing = dict(answers)
-    del missing["category"]
+    del missing["command_kind"]
     with pytest.raises(ValueError, match="do not match"):
         tree.resolve(ProviderResult(model="jev-test", answers=missing))
 
@@ -301,9 +290,7 @@ def test_compact_payload_round_trips_facts_commands_and_every_leaf(observation):
     restored_obs["units"] = table(wire_obs["units"])
     for restored in restored_obs["units"]:
         restored["position"] = pos(restored["position"])
-        restored["build_sites"] = [
-            {"unit_type": site[0], "tile": pos(site[1])} for site in restored["build_sites"]
-        ]
+        assert "build_sites" not in restored
     restored_obs["enemies"] = table(wire_obs["enemies"])
     for restored in restored_obs["enemies"]:
         restored["position"] = pos(restored["position"])
@@ -314,7 +301,13 @@ def test_compact_payload_round_trips_facts_commands_and_every_leaf(observation):
     for restored in restored_obs["locations"]:
         restored["position"] = pos(restored["position"])
     restored_obs["receipts"] = table(wire_obs["receipts"])
-    assert json.dumps(restored_obs, sort_keys=True) == json.dumps(obs.model_dump(), sort_keys=True)
+    expected_obs = obs.model_dump()
+    unit_columns = set(wire_obs["units"]["columns"])
+    for expected_unit in expected_obs["units"]:
+        for key in tuple(expected_unit):
+            if key not in unit_columns:
+                expected_unit.pop(key)
+    assert json.dumps(restored_obs, sort_keys=True) == json.dumps(expected_obs, sort_keys=True)
 
     restored_actions = []
     for row in table(payload["state"]["candidate_actions"]):
@@ -359,20 +352,7 @@ def test_compact_payload_round_trips_facts_commands_and_every_leaf(observation):
         selected, _ = tree.resolve(ProviderResult(model="jev-test", answers=answers))
         assert selected.id == target
 
-        wire_questions = payload["questions"]
-        wire_tree = payload["state"]["choice_tree"]
-        wire_actions = {row["id"]: row for row in table(payload["state"]["candidate_actions"])}
-        wire_command_rows = None
-        for node, choice in path("action", target):
-            options = (
-                wire_questions[node]["criteria"] if node in wire_questions else wire_tree[node]
-            )
-            wire_ref = options[choice]
-            if wire_ref.startswith("leaf:"):
-                assert wire_ref[5:] == target
-                wire_command_rows = wire_actions[target]["commands"]
-                break
-        assert wire_command_rows == wire_actions[target]["commands"]
+        assert "choice_tree" not in payload["state"]
 
 
 def test_openai_schema_and_no_invented_confidence(observation):

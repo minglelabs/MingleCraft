@@ -5,13 +5,12 @@ Jev already knows StarCraft deeply. Only tell it the format.
 
 JEV_ENGLISH_POLICY = (
     "You are playing StarCraft: Brood War v1.16.1 via BWAPI v4.4.0 (injected by Chaoslauncher). "
-    "Wire format: state uses 'jev/compact-v1'. state.candidate_actions contains all executable options with "
-    "columns [id, category, group, label, commands]. Choice questions form a tree: choose the action kind, "
-    "then the actual unit or unit group, then its executable command or target. Each criteria key is the exact "
-    "option ID for that node. A criteria value is a reference such as node:question_id or leaf:action_id. "
-    "All requested questions are evaluated independently in the same state; the program follows the selected "
-    "references to execute one leaf action. Use observation.self_race and enemy_race when interpreting the "
-    "state. Compare worker training, supply or power, construction, gathering, and combat candidates; do not "
-    "repeat a gather order by default when a legal production or construction candidate addresses the current "
-    "state. Answer every requested Choice with an existing option ID."
+    "Your objective is to win the current match. "
+    "Wire format: state uses 'jev/compact-v1'. Choice questions follow a command kind hierarchy: "
+    "choose the command kind, then the acting unit or unit group, then the specific command target or parameters. "
+    "Each criteria key is the exact option ID for that node. "
+    "Use observation.self_race and enemy_race when interpreting the state and the supplied map/game facts. "
+    "Positions are pixel coordinates; build and land tile fields are build-tile coordinates. "
+    "Ground commands with null position or tile require later coordinate questions and do not target the origin. "
+    "Answer the one requested Choice question with an existing option ID."
 )

@@ -1,8 +1,33 @@
 """Compact, lossless wire encoding for staged model requests."""
 
+import re
 from copy import deepcopy
 
 from minglecraft.models import DecisionRequest
+
+
+def estimate_tokens_conservative(text: str) -> int:
+    """Heuristic token estimator for JSON wire payloads without an official tokenizer.
+
+    This is an empirical rough heuristic, not a calibrated tokenizer, formal upper bound,
+    or provider guarantee. Actual provider token counts vary by proprietary vocabulary.
+    Separate ASCII letters, digits, and punctuation so combined identifiers
+    (e.g., 'spatial_attack_unit_123') are not treated as single tokens. Non-ASCII
+    characters are conservatively weighted by UTF-8 byte length.
+    """
+    # Match ASCII letters, digits, non-ASCII runs (ord > 127), and remaining symbols/punctuation
+    pieces = re.findall(r"[a-zA-Z]+|[0-9]+|[^\x01-\x7f]+|[^\s]", text)
+    count = 0
+    for p in pieces:
+        if p.isdigit():
+            count += max(1, (len(p) + 1) // 2)
+        elif p.isascii() and p.isalpha():
+            count += max(1, (len(p) + 2) // 3)
+        elif not p.isascii():
+            count += max(1, len(p.encode("utf-8")) // 2)
+        else:
+            count += 1
+    return int(count * 1.15)
 
 
 def _columnar(items: list[dict], columns: list[str]) -> dict:
@@ -58,9 +83,6 @@ def _units(units: list[dict]) -> dict:
         "constructing",
         "can_move",
         "can_attack",
-        "can_train",
-        "can_gather",
-        "build_sites",
         "can_siege",
         "can_unsiege",
         "can_cloak",
@@ -73,13 +95,6 @@ def _units(units: list[dict]) -> dict:
         "can_lift",
         "can_land",
         "can_unload_all",
-        "load_targets",
-        "unload_targets",
-        "repair_targets",
-        "can_use_tech",
-        "can_use_tech_without_target",
-        "can_use_tech_at_position",
-        "tech_target_ids",
     ]
     rows = []
     for unit in units:
@@ -91,13 +106,10 @@ def _units(units: list[dict]) -> dict:
                 unit["hit_points"],
                 unit["completed"],
                 unit["idle"],
-                unit["training"],
-                unit["constructing"],
-                unit["can_move"],
-                unit["can_attack"],
-                unit["can_train"],
-                unit["can_gather"],
-                [[site["unit_type"], _position(site["tile"])] for site in unit["build_sites"]],
+                unit.get("training", False),
+                unit.get("constructing", False),
+                unit.get("can_move", False),
+                unit.get("can_attack", False),
                 unit.get("can_siege", False),
                 unit.get("can_unsiege", False),
                 unit.get("can_cloak", False),
@@ -110,13 +122,6 @@ def _units(units: list[dict]) -> dict:
                 unit.get("can_lift", False),
                 unit.get("can_land", False),
                 unit.get("can_unload_all", False),
-                unit.get("load_targets", []),
-                unit.get("unload_targets", []),
-                unit.get("repair_targets", []),
-                unit.get("can_use_tech", []),
-                unit.get("can_use_tech_without_target", []),
-                unit.get("can_use_tech_at_position", []),
-                unit.get("tech_target_ids", {}),
             ]
         )
     return {"columns": columns, "rows": rows}
@@ -163,38 +168,24 @@ def _observation(observation: dict) -> dict:
     return compact
 
 
-def _reference(child: str) -> str:
-    if child.startswith(("node:", "leaf:")):
-        return child
-    return f"node:{child}"
-
-
 def compact_state(
     state: dict,
-    choice_tree: dict | None = None,
-    asked_nodes: set[str] | None = None,
 ) -> dict:
     compact = deepcopy(state)
+    compact.pop("choice_tree", None)
     if "observation" in compact:
         compact["observation"] = _observation(compact["observation"])
     if "candidate_actions" in compact:
         compact["candidate_actions"] = _actions(compact["candidate_actions"])
-    if choice_tree is not None:
-        compact["choice_tree"] = {
-            node: {option: _reference(child) for option, child in options.items()}
-            for node, options in choice_tree.items()
-            if not asked_nodes or node not in asked_nodes
-        }
     return compact
 
 
 def compact_request_payload(
-    request: DecisionRequest, model: str, choice_tree: dict | None = None
+    request: DecisionRequest,
+    model: str,
+    choice_tree: dict | None = None,
 ) -> dict:
-    """Encode only model-facing JSON; local request objects remain lossless."""
-    choice_tree = choice_tree or request.choice_tree
-    asked_nodes = set(request.questions) if choice_tree is not None else None
-    state = compact_state(request.state, choice_tree, asked_nodes)
+    state = compact_state(request.state)
     payload = {
         "model": model,
         "state": {"schema": "jev/compact-v1", **state},
@@ -203,18 +194,12 @@ def compact_request_payload(
     payload["state"]["legend"] = {
         "pos": "[x,y]",
         "commands": "[kind,unit_ids,unit_type,target_id,position,tile,tech]; positions use pos",
-        "build_sites": "[unit_type,pos]",
-        "choice_tree": "only unasked deterministic nodes; asked node mappings are in that question criteria",
-        "choice_refs": "criteria/tree values use node:N or leaf:ACTION; option keys are exact answer IDs",
+        "units": "[id,type,position,hit_points,completed,idle,training,constructing,can_move,can_attack,can_siege,can_unsiege,can_cloak,can_decloak,can_stim,can_patrol,can_return_cargo,can_burrow,can_unburrow,can_lift,can_land,can_unload_all]",
+        "criteria": "criteria keys are valid option IDs; values contain natural language option descriptions",
     }
     for key, question in request.questions.items():
         data = question.model_dump()
         if "criteria" in data:
-            if choice_tree is None:
-                data["criteria"] = dict(data["criteria"])
-            else:
-                data["criteria"] = {
-                    option: _reference(choice_tree[key][option]) for option in data["criteria"]
-                }
+            data["criteria"] = dict(data["criteria"])
         payload["questions"][key] = data
     return payload

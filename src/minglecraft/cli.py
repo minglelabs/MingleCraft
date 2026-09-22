@@ -67,6 +67,18 @@ def main():
             help="Maximum wire-payload bytes per provider request (positive integer)",
         )
         command.add_argument(
+            "--byte-budget",
+            type=int,
+            default=96_000,
+            help="Conservative byte budget per request (positive integer, not a guaranteed provider limit)",
+        )
+        command.add_argument(
+            "--token-budget",
+            type=int,
+            default=24_000,
+            help="Conservative estimated token budget per request (positive integer, not an exact tokenizer count)",
+        )
+        command.add_argument(
             "--spatial-precision-px",
             type=int,
             default=8,
@@ -120,6 +132,8 @@ def main():
             pricing=pricing,
             strategy=strategy,
             request_size_limit=args.request_size_limit,
+            byte_budget=args.byte_budget,
+            token_budget=args.token_budget,
             spatial_precision_px=args.spatial_precision_px,
         )
 
