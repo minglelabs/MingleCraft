@@ -12,12 +12,11 @@ from minglecraft.actions.generator import ActionGenerator
 from minglecraft.actions.hierarchy import PROBABILITY_SUM_TOLERANCE, ChoiceTree
 from minglecraft.actions.pruner import prune
 from minglecraft.actions.spatial import (
-    build_refinement_question,
-    build_region_question,
-    child_bounds,
+    build_digit_question,
     get_spatial_grid_spec,
-    parse_refinement_key,
-    parse_region_key,
+    parse_digit_key,
+    spatial_digit_depth,
+    synthesize_radix_coordinate,
 )
 from minglecraft.agents.encoding import compact_request_payload, estimate_tokens_conservative
 from minglecraft.agents.providers import DecisionProvider
@@ -40,7 +39,7 @@ LIVE_VALUE_INSTRUCTIONS = "Estimate the chance of ultimately winning from the su
 
 
 class ContextBudgetGuard(ValueError):
-    """A request cannot fit even after all safe choice-node partitions."""
+    """One complete request exceeds its context budget without dropping choices."""
 
     def __init__(self, diagnostic: str):
         super().__init__("context_budget_exceeded")
@@ -52,14 +51,15 @@ def live_policy_instructions(map_name: str | None = None) -> str:
     return (
         f"You are playing StarCraft: Brood War v1.16.1 via BWAPI v4.4.0 (injected by Chaoslauncher){map_info}. "
         "Your objective is to win the current match. "
-        "Wire format: state uses 'jev/compact-v1'. Choice questions follow a command kind hierarchy: "
-        "choose the command kind, then the acting unit or unit group, then the specific command target or parameters. "
-        "Each criteria key is the exact option ID for that node. "
+        "Wire format: state uses 'jev/compact-v1'. All Choice questions are answered "
+        "independently in one request. For each tree node, assume the branch named "
+        "in that question is being considered. The program follows only the answers "
+        "on the chosen command kind, actor, and target path. Criteria keys are option IDs. "
         "Use observation.self_race and enemy_race when interpreting the game and map state. "
         "Positions are pixel coordinates; build and land tile fields are build-tile coordinates. "
-        "Answer the one requested Choice question with an existing option ID. "
-        "Ground-coordinate candidates with null position or tile require subsequent coordinate choices; "
-        "they do not target the origin. Return only the requested Choice answers."
+        "Answer every requested Choice with an existing option ID. "
+        "Ground-coordinate actions use spatial digit questions in this same request; "
+        "null position or tile does not target the origin."
     )
 
 
@@ -78,13 +78,14 @@ class AgentLoop:
         strategy: str = SHARED_POLICY,
         request_size_limit: int = 1_500_000,
         byte_budget: int = 96_000,
-        token_budget: int = 24_000,
+        token_budget: int = 48_000,
+        question_token_budget: int = 24_000,
         single_stage: bool = False,
         spatial_precision_px: int = 8,
     ):
         if deadline_ms <= 0 or ttl_frames <= 0 or not 8 <= limit <= 50:
             raise ValueError("Invalid deadline, TTL or candidate limit")
-        if request_size_limit <= 0 or byte_budget <= 0 or token_budget <= 0:
+        if request_size_limit <= 0 or byte_budget <= 0 or token_budget <= 0 or question_token_budget <= 0:
             raise ValueError("Budgets and limits must be positive")
         if spatial_precision_px <= 0:
             raise ValueError("Spatial precision must be positive")
@@ -95,6 +96,7 @@ class AgentLoop:
         self.seed, self.mode, self.pricing = seed, mode, pricing
         self.strategy, self.request_size_limit = strategy, request_size_limit
         self.byte_budget, self.token_budget = byte_budget, token_budget
+        self.question_token_budget = question_token_budget
         self.state_builder, self.generator, self.scheduler = (
             StateBuilder(),
             ActionGenerator(),
@@ -143,11 +145,31 @@ class AgentLoop:
             if len(payload_bytes) > self.request_size_limit:
                 raise ValueError("request_size_guard")
             if len(payload_bytes) > self.byte_budget:
-                raise ValueError("context_budget_exceeded")
+                raise ContextBudgetGuard(
+                    f"wire_bytes={len(payload_bytes)}; byte_budget={self.byte_budget}"
+                )
 
             estimated_tokens = estimate_tokens_conservative(payload_bytes.decode(errors="replace"))
             if estimated_tokens > self.token_budget:
-                raise ValueError("context_budget_exceeded")
+                raise ContextBudgetGuard(
+                    f"estimated_tokens={estimated_tokens}; total_budget={self.token_budget}"
+                )
+            for question_id, question in payload_dict["questions"].items():
+                single_question = json.dumps(
+                    {
+                        "model": self.provider.model,
+                        "state": payload_dict["state"],
+                        "questions": {question_id: question},
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+                question_tokens = estimate_tokens_conservative(single_question)
+                if question_tokens > self.question_token_budget:
+                    raise ContextBudgetGuard(
+                        f"question={question_id}; estimated_tokens={question_tokens}; "
+                        f"question_budget={self.question_token_budget}"
+                    )
         else:
             payload_bytes = json.dumps(
                 {
@@ -190,53 +212,6 @@ class AgentLoop:
         }
 
     @staticmethod
-    def _range_label(labels: list[str], start: int, end: int) -> str:
-        first, last = labels[start], labels[end - 1]
-        return f"options {start + 1}-{end}: {first} through {last}"
-
-    def _split_budget_node(self, tree: ChoiceTree, node: str) -> None:
-        """Split a node in deterministic order while preserving every leaf reference."""
-        options = list(tree.nodes[node].items())
-        if len(options) <= 2:
-            raise ContextBudgetGuard(f"node={node}; options={len(options)}; state_or_question_too_large")
-        midpoint = len(options) // 2
-        ranges = (options[:midpoint], options[midpoint:])
-        parent_options: dict[str, str] = {}
-        parent_priorities: dict[str, float] = {}
-        parent_question = tree.request.questions[node]
-        for index, branch in enumerate(ranges, 1):
-            child = f"{node}_budget_{index}"
-            branch_options = dict(branch)
-            tree.nodes[child] = branch_options
-            tree.priorities[child] = {
-                key: tree.priorities[node][key] for key in branch_options
-            }
-            tree.request.questions[child] = ChoiceQuestion(
-                instructions=parent_question.instructions,
-                criteria={
-                    key: tree.request.questions[node].criteria[key] for key in branch_options
-                },
-            )
-            partition_key = f"budget_range_{index}"
-            parent_options[partition_key] = child
-            parent_priorities[partition_key] = max(
-                tree.priorities[child].values(), default=0.0
-            )
-        tree.nodes[node] = parent_options
-        tree.priorities[node] = parent_priorities
-        tree.request.questions[node] = ChoiceQuestion(
-            instructions=parent_question.instructions,
-            criteria={
-                f"budget_range_{index}": self._range_label(
-                    [tree.request.questions[node].criteria[key] for key, _ in options],
-                    0 if index == 1 else midpoint,
-                    midpoint if index == 1 else len(options),
-                )
-                for index in (1, 2)
-            },
-        )
-
-    @staticmethod
     def _resolve_spatial(result: ProviderResult, question: ChoiceQuestion) -> str:
         if set(result.answers) != {"spatial"}:
             raise ValueError("invalid_spatial_answer_ids")
@@ -257,7 +232,27 @@ class AgentLoop:
                 raise ValueError("invalid_spatial_probability_sum")
         return answer.choice
 
-    async def _resolve_spatial_action(self, obs, state, action, deadline, calls):
+    def _spatial_questions(self, obs, actions):
+        questions = {}
+        if obs.map_width < 1 or obs.map_height < 1:
+            return questions
+        spec = get_spatial_grid_spec(obs, self.spatial_precision_px)
+        depth = spatial_digit_depth(spec)
+        spatial_kinds = {"move", "attack", "patrol", "build", "land", "unload_all", "use_tech"}
+        for action in actions:
+            if not action.category.startswith("spatial_") or not action.commands:
+                continue
+            command = action.commands[0]
+            if command.kind not in spatial_kinds or command.position is not None or command.tile is not None:
+                continue
+            actor = action.id
+            for digit in range(1, depth + 1):
+                questions[f"spatial_{action.id}_{digit}"] = build_digit_question(
+                    actor, command.kind, spec, digit, depth
+                )
+        return questions
+
+    def _resolve_spatial_action(self, obs, action, result):
         command = action.commands[0]
         spatial_kinds = {"move", "attack", "patrol", "build", "land", "unload_all", "use_tech"}
         if not action.category.startswith("spatial_"):
@@ -269,96 +264,23 @@ class AgentLoop:
         ):
             return action, []
         spec = get_spatial_grid_spec(obs, self.spatial_precision_px)
-        actor = f"unit(s) {','.join(map(str, command.unit_ids))}"
-        bounds = (0, 0, spec.map_width, spec.map_height)
+        depth = spatial_digit_depth(spec)
+        digits = []
         path = []
-
-        async def ask(question):
-            spatial_state = self._context(state, [action])
-            spatial_questions = {"spatial": question}
-            spatial_candidate = DecisionRequest(
-                state=spatial_state,
-                questions=spatial_questions,
-                priorities={},
+        for digit in range(1, depth + 1):
+            key = f"spatial_{action.id}_{digit}"
+            answer = result.answers.get(key)
+            if answer is None or answer.type != "choice":
+                raise ValueError(f"Provider answer missing for spatial digit: {key}")
+            question = build_digit_question(
+                action.id, command.kind, spec, digit, depth
             )
-            spatial_metrics = self._wire_metrics(spatial_candidate) or {}
-            try:
-                request = self._request(spatial_state, spatial_questions)
-            except ValueError as request_error:
-                calls.append(
-                    {
-                        "stage": "spatial",
-                        "node": "spatial",
-                        "latency_ms": 0,
-                        "usage": {},
-                        "sent": False,
-                        "attempted": False,
-                        "error": type(request_error).__name__,
-                        **spatial_metrics,
-                    }
-                )
-                if str(request_error) in {"context_budget_exceeded", "request_size_guard"}:
-                    raise ContextBudgetGuard(
-                        "node=spatial; options="
-                        f"{len(question.criteria)}; spatial_question_too_large"
-                    ) from request_error
-                raise
-            if deadline - time.monotonic() <= 0:
-                raise asyncio.TimeoutError()
-            started = time.perf_counter()
-            call = {
-                "stage": "spatial",
-                "node": "spatial",
-                "latency_ms": 0,
-                "usage": {},
-                "sent": True,
-                "attempted": True,
-                **(self._wire_metrics(request) or {}),
-            }
-            calls.append(call)
-            try:
-                result, latency = await self._call(request, deadline)
-            except Exception as exc:
-                call.update({"latency_ms": (time.perf_counter() - started) * 1000, "error": type(exc).__name__})
-                raise
-            call.update({"latency_ms": latency, "usage": result.usage})
-            choice = self._resolve_spatial(result, question)
-            path.append(
-                {
-                    "node": "spatial",
-                    "choice": choice,
-                    "answer": result.answers["spatial"].model_dump(),
-                }
-            )
-            return choice
-
-        region = parse_region_key(await ask(build_region_question(actor, command.kind, spec)))
-        bounds = spec.region_bounds(*region)
-        level = 1
-
-        latencies = [c["latency_ms"] for c in calls if c.get("latency_ms", 0) > 0]
-        typical_latency_sec = (sum(latencies) / len(latencies) / 1000.0) if latencies else 0.05
-        safety_margin_sec = max(0.015, typical_latency_sec * 1.25)
-
-        while max(bounds[2] - bounds[0], bounds[3] - bounds[1]) > spec.precision_px:
-            if deadline - time.monotonic() < safety_margin_sec:
-                break
-            try:
-                x, y = parse_refinement_key(
-                    await ask(build_refinement_question(actor, command.kind, bounds, level))
-                )
-            except asyncio.TimeoutError:
-                break
-            bounds = child_bounds(bounds, x, y)
-            level += 1
-            if calls and calls[-1].get("latency_ms", 0) > 0:
-                latencies.append(calls[-1]["latency_ms"])
-                typical_latency_sec = sum(latencies) / len(latencies) / 1000.0
-                safety_margin_sec = max(0.015, typical_latency_sec * 1.25)
-        position = {
-            "x": min(spec.map_width - 1, (bounds[0] + bounds[2] - 1) // 2),
-            "y": min(spec.map_height - 1, (bounds[1] + bounds[3] - 1) // 2),
-        }
+            ChoiceTree._validate_answer(answer, question)
+            dx, dy = parse_digit_key(answer.choice)
+            digits.append((dx, dy))
+            path.append({"node": key, "choice": answer.choice, "answer": answer.model_dump()})
+        x, y = synthesize_radix_coordinate(spec, digits)
+        position = {"x": x, "y": y}
         if command.kind in {"build", "land"}:
             resolved = command.model_copy(
                 update={"tile": Position(x=position["x"] // 32, y=position["y"] // 32)}
@@ -413,6 +335,7 @@ class AgentLoop:
                     "request_size_limit": self.request_size_limit,
                     "byte_budget": self.byte_budget,
                     "token_budget": self.token_budget,
+                    "question_token_budget": self.question_token_budget,
                     "candidate_limit": None if (self.staged or self.single_stage) else self.limit,
                     "candidate_exhaustive": self.staged or self.single_stage,
                     "scheduling": "all_categories"
@@ -451,13 +374,49 @@ class AgentLoop:
             if (staged or self.single_stage)
             else prune(self.generator.generate(obs, due), self.limit)
         )
+        state["common_policy"] = live_policy_instructions(obs.map_name)
         tree = ChoiceTree(
             state,
             actions,
-            instructions=live_policy_instructions(obs.map_name)
+            instructions="Follow state.common_policy."
             if (staged or self.single_stage)
             else POLICY_INSTRUCTIONS,
             hierarchical=staged or self.single_stage,
+        )
+        if obs.map_width > 0 and obs.map_height > 0:
+            state["coordinate_rule"] = (
+                "For an action's one absolute pixel destination, each independent "
+                "digit question gives one base-4 x/y digit. All digits represent "
+                "the same intended destination; no question sees other answers. "
+                "With digits i=1..depth (most significant first), "
+                "x=floor(map_width*sum(x_digit_i*4^(depth-i))/4^depth); "
+                "use the same formula for y. x increases rightward, y downward. "
+                f"map_width={obs.map_width}; map_height={obs.map_height}."
+            )
+        state["spatial_actors"] = {
+            action.id: {
+                "label": action.label,
+                "unit_ids": list(action.commands[0].unit_ids),
+                "kind": action.commands[0].kind,
+            }
+            for action in actions
+            if action.category.startswith("spatial_")
+            and action.commands
+            and action.commands[0].position is None
+            and action.commands[0].tile is None
+        }
+        all_questions = dict(tree.request.questions)
+        if staged:
+            all_questions["win_probability"] = NoulQuestion(instructions=LIVE_VALUE_INSTRUCTIONS)
+        all_questions.update(self._spatial_questions(obs, actions))
+        # Every legal leaf is already represented by its Choice criterion. Sending
+        # the full action table again nearly doubles the model-facing context.
+        combined_state = self._context(state, [], self.latest_value, tree.nodes)
+        combined_request = DecisionRequest(
+            state=combined_state,
+            questions=all_questions,
+            choice_tree=tree.nodes,
+            priorities=tree.priorities,
         )
 
         wait_action = next(
@@ -469,97 +428,52 @@ class AgentLoop:
         value_result = policy_result = None
         value_request = policy_request = None
         calls = []
-        attempted_stage = None
-        call_started = None
         diagnostic = None
 
         try:
             if time.monotonic() < self.retry_after:
                 reason = "provider_cooldown"
             else:
-                # 1. Staged value estimation
+                combined_request = self._request(
+                    combined_state,
+                    all_questions,
+                    choice_tree=tree.nodes,
+                    priorities=tree.priorities,
+                )
+                policy_request = combined_request
+                if deadline - time.monotonic() <= 0:
+                    raise asyncio.TimeoutError()
+                started = time.perf_counter()
+                call = {
+                    "stage": "combined",
+                    "node": "all_questions",
+                    "includes_value": staged,
+                    "latency_ms": 0,
+                    "usage": {},
+                    "sent": True,
+                    "attempted": True,
+                    **(self._wire_metrics(combined_request) or {}),
+                }
+                calls.append(call)
+                try:
+                    combined_result, latency = await self._call(combined_request, deadline)
+                except Exception as exc:
+                    call.update({"latency_ms": (time.perf_counter() - started) * 1000, "error": type(exc).__name__})
+                    raise
+                call.update({"latency_ms": latency, "usage": combined_result.usage})
+                policy_result = combined_result
                 if staged:
-                    value_state = self._context(
-                        state,
-                        [],
-                        self.latest_value,
+                    answer = combined_result.answers.get("win_probability")
+                    if answer is None or answer.type != "noul":
+                        raise ValueError("invalid_value_answer")
+                    value_result = ProviderResult(
+                        model=combined_result.model,
+                        answers={"win_probability": answer},
+                        usage=combined_result.usage,
                     )
-                    try:
-                        value_questions = {
-                            "win_probability": NoulQuestion(instructions=LIVE_VALUE_INSTRUCTIONS)
-                        }
-                        value_candidate = DecisionRequest(
-                            state=value_state,
-                            questions=value_questions,
-                            priorities={},
-                        )
-                        value_metrics = self._wire_metrics(value_candidate) or {}
-                        value_request = self._request(value_state, value_questions)
-                        if deadline - time.monotonic() <= 0:
-                            raise asyncio.TimeoutError()
-                        attempted_stage, call_started = "value", time.perf_counter()
-                        value_call = {
-                            "stage": "value",
-                            "node": "win_probability",
-                            "latency_ms": 0,
-                            "usage": {},
-                            "sent": True,
-                            "attempted": True,
-                            **value_metrics,
-                        }
-                        calls.append(value_call)
-                        try:
-                            value_result, latency = await self._call(value_request, deadline)
-                        except Exception as exc:
-                            value_call.update(
-                                {
-                                    "latency_ms": (time.perf_counter() - call_started) * 1000,
-                                    "error": type(exc).__name__,
-                                }
-                            )
-                            raise
-                        value_call.update({"latency_ms": latency, "usage": value_result.usage})
-                        answer = value_result.answers.get("win_probability")
-                        if answer is None or answer.type != "noul":
-                            raise ValueError("invalid_value_answer")
-                        self.latest_value = {"frame": obs.frame, "win_probability": answer.noul}
-                        self.history.value_estimate(obs, answer.noul)
-                    except Exception as value_exc:
-                        self.latest_value = None
-                        value_call_record = next(
-                            (c for c in reversed(calls) if c["stage"] == "value"), None
-                        )
-                        if value_call_record is None:
-                            calls.append(
-                                {
-                                    "stage": "value",
-                                    "node": "win_probability",
-                                    "latency_ms": (
-                                        (time.perf_counter() - call_started) * 1000
-                                        if attempted_stage == "value" and call_started
-                                        else 0
-                                    ),
-                                    "usage": {},
-                                    "error": type(value_exc).__name__,
-                                    "sent": False,
-                                    "attempted": False,
-                                    **locals().get("value_metrics", {}),
-                                }
-                            )
-                        elif attempted_stage == "value":
-                            value_call_record.update(
-                                {
-                                    "latency_ms": (
-                                        (time.perf_counter() - call_started) * 1000
-                                        if call_started
-                                        else 0
-                                    ),
-                                    "error": type(value_exc).__name__,
-                                }
-                            )
-                        attempted_stage = None
+                    self.latest_value = {"frame": obs.frame, "win_probability": answer.noul}
+                    self.history.value_estimate(obs, answer.noul)
 
-                # 2. Policy traversal: sequential single-node queries along chosen path
                 if not tree.request.questions:
                     default_action = tree.actions.get("wait") or next(iter(tree.actions.values()))
                     root = "command_kind" if tree.is_hierarchical else "action"
@@ -567,120 +481,10 @@ class AgentLoop:
                     selected, path = default_action, [{"node": root, "choice": choice, "answer": None}]
                 else:
                     root = "command_kind" if tree.is_hierarchical else "action"
-                    curr_node = root
-                    selected = wait_action
-
-                    while True:
-                        options = tree.nodes[curr_node]
-                        if len(options) == 1:
-                            choice = next(iter(options))
-                            path.append({"node": curr_node, "choice": choice, "answer": None})
-                            child = options[choice]
-                            if child.startswith("leaf:"):
-                                selected = tree.actions[child[5:]]
-                                break
-                            curr_node = child
-                            continue
-
-                        # Only include direct leaves for this specific node
-                        direct_leaves = [
-                            tree.actions[child[5:]] for child in options.values() if child.startswith("leaf:")
-                        ]
-                        node_question = tree.request.questions[curr_node]
-                        node_state = self._context(state, direct_leaves, self.latest_value)
-
-                        node_priorities = (
-                            {curr_node: dict(tree.priorities[curr_node])}
-                            if curr_node in tree.priorities
-                            else {}
-                        )
-                        node_questions = {curr_node: node_question}
-                        node_choice_tree = {curr_node: dict(options)}
-                        node_candidate = DecisionRequest(
-                            state=node_state,
-                            questions=node_questions,
-                            choice_tree=node_choice_tree,
-                            priorities=node_priorities,
-                        )
-                        node_metrics = self._wire_metrics(node_candidate) or {}
-                        try:
-                            node_request = self._request(
-                                node_state,
-                                node_questions,
-                                choice_tree=node_choice_tree,
-                                priorities=node_priorities,
-                            )
-                        except ValueError as request_error:
-                            if str(request_error) in {
-                                "context_budget_exceeded",
-                                "request_size_guard",
-                            }:
-                                calls.append(
-                                    {
-                                        "stage": "policy",
-                                        "node": curr_node,
-                                        "latency_ms": 0,
-                                        "usage": {},
-                                        "sent": False,
-                                        "attempted": False,
-                                        "error": type(request_error).__name__,
-                                        **node_metrics,
-                                    }
-                                )
-                                if len(options) > 2:
-                                    self._split_budget_node(tree, curr_node)
-                                    continue
-                                raise ContextBudgetGuard(
-                                    f"node={curr_node}; options={len(options)}; "
-                                    "state_or_question_too_large"
-                                ) from request_error
-                            raise
-                        if policy_request is None:
-                            policy_request = node_request
-
-                        if deadline - time.monotonic() <= 0:
-                            raise asyncio.TimeoutError()
-                        attempted_stage, call_started = "policy", time.perf_counter()
-                        policy_call = {
-                            "stage": "policy",
-                            "node": curr_node,
-                            "latency_ms": 0,
-                            "usage": {},
-                            "sent": True,
-                            "attempted": True,
-                            **(self._wire_metrics(node_request) or {}),
-                        }
-                        calls.append(policy_call)
-                        try:
-                            node_result, latency = await self._call(node_request, deadline)
-                        except Exception as exc:
-                            policy_call.update(
-                                {
-                                    "latency_ms": (time.perf_counter() - call_started) * 1000,
-                                    "error": type(exc).__name__,
-                                }
-                            )
-                            raise
-                        policy_call.update({"latency_ms": latency, "usage": node_result.usage})
-                        policy_result = node_result
-
-                        answer = node_result.answers.get(curr_node)
-                        if answer is None:
-                            raise ValueError(f"Provider answer missing for node: {curr_node}")
-                        ChoiceTree._validate_answer(answer, node_question)
-                        choice = answer.choice
-                        path.append({"node": curr_node, "choice": choice, "answer": answer.model_dump()})
-
-                        child = options[choice]
-                        if child.startswith("leaf:"):
-                            selected = tree.actions[child[5:]]
-                            break
-                        curr_node = child
+                    selected, path = tree.resolve(combined_result)
 
                 if selected.commands:
-                    selected, spatial_path = await self._resolve_spatial_action(
-                        obs, state, selected, deadline, calls
-                    )
+                    selected, spatial_path = self._resolve_spatial_action(obs, selected, combined_result)
                     path.extend(spatial_path)
 
         except Exception as exc:

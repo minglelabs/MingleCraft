@@ -1,26 +1,26 @@
-# Jev policy and two-stage decision contract
+# Jev policy and parallel question contract
 
-This document defines the prompts and state contract used by MingleCraft. The value and policy stages are two inference roles of the same Jev/System One model. They are not separately trained reinforcement-learning networks, and their outputs are not measured or calibrated win rates.
+This document describes the live MingleCraft contract and retains older strategy and replay notes below as archival references. Noul and Choice are two inference roles of the same Jev/System One model; they are not separately trained reinforcement-learning networks or measured win rates.
 
 ## Current live runtime
 
 The live Jev path currently omits the bundled strategy and cumulative match history from remote requests following context-limit failures. The strategy text below remains an archived reference; it is not the active wire prompt. `--strategy-file` does not enable strategy transmission in this mode. Full observations, legal actions, receipts, and match history remain available locally; remote input retains current visible state and dated enemy memory. Compact representations must preserve the available candidates and their exact local execution mapping.
 
-The value and policy calls remain sequential. Compact payload size is measured in UTF-8 bytes; it is not an exact Jev token count or proof of live API acceptance. Validate changes with fresh live decision/receipt traces before claiming successful gameplay.
+One provider request contains every tree question and every independent 4x4 coordinate-digit question, plus the optional Noul forecast. A Choice answer cannot read the Noul answer from the same call. The request includes a map-specific common policy once. Size is checked in UTF-8 bytes and estimated tokens; the estimate is not Jev's official tokenizer. Validate gameplay with fresh live decision and receipt traces.
 
 ## Compact live wire format
 
 Direct Jev and OpenRouter Jev requests use `state.schema = "jev/compact-v1"`. Local observations, actions, and execution envelopes keep the normal typed objects. Only provider-bound JSON changes:
 
-- Repeated entity and action objects become `columns` / `rows` tables. Every current observation field, supported legal action, and command parameter is preserved; baseline-only priority scores stay private.
+- Observed entities become `columns` / `rows` tables. Every supported legal action remains a local tree leaf; its description is in that leaf's Choice criterion. The entire raw action table is not duplicated in the provider request. Baseline-only priority scores stay private.
 - Positions use `[x, y]`; command and construction-site rows have an explicit legend.
-- Choice questions use an action tree: action kind → actual unit or unit group → executable command or target. Criteria reference an action or another decision node instead of repeating every descendant action label at each hierarchy level. Labels and commands remain in the action table. Single-option branches remain reachable, and every Choice question stays below the provider's 255-choice limit.
-- The value request contains current state and every candidate but does not need the policy hierarchy. Policy receives the fresh estimate and the hierarchy. The two-call design is unchanged.
-- `value_request_bytes` and `policy_request_bytes` record compact UTF-8 request size. Logged request objects retain their readable local representation. API `usage.input_tokens` is the source for actual provider token counts; byte reduction does not guarantee equivalent token reduction.
+- Choice questions use command kind → actual unit or unit group → executable command or target. Every non-singleton node is asked in the same request, with branch assumptions in its instructions. Code validates only the selected path. Every question remains under 255 choices.
+- Spatial questions encode successive base-4 x/y digits of one absolute destination. The model answers them independently; digit consistency is an assumption, not a guarantee. There is no later coordinate call.
+- The optional Noul value question shares the request and cannot supply a fresh estimate to the Choices. Request bytes and estimated tokens are logged; actual token usage comes from the provider response.
 
 Current visible enemies and dated last sightings remain distinct. This encoding does not reconstruct information missing from BWAPI, restore cumulative history to the prompt, invent targets, or enable model-generated actions.
 
-### Offline replay measurement (2026-09-21)
+### Archived offline replay measurement (2026-09-21)
 
 The captured run `bwapi_29908_1789891637947956` was re-encoded without making API calls. Sizes include model, state, questions, and the compact legend. The old side uses the captured request (already excluding strategy and history); the new side preserves its observations and candidates. This is not a live performance or exact token benchmark.
 

@@ -38,7 +38,7 @@ Run `gemini-3.1-flash-lite` as the current Google alternative and `openai/gpt-os
 
 `OpenAIProvider` accepts `base_url` in Python, so Groq or another OpenAI-compatible service is programmatically possible. The CLI mapping in `src/minglecraft/cli.py` is narrower: `--base-url` defaults to `http://127.0.0.1:8000/v1`, and `provider_for()` passes it only to `LocalModelProvider`. For `--provider openai`, the CLI constructs `OpenAIProvider(api_key, args.model)` and therefore uses its default `https://api.openai.com/v1`. A Groq switch currently needs an adapter/configuration change or a programmatic caller; changing only `--model` on the existing `serve` command is insufficient.
 
-Do not preserve Jev's serial value/policy shape for these providers unless the value is required for a separate product metric. The fastest fair comparison is one request containing the finite-action policy decision. If `win_probability` is still required, put it beside the selected action in the same response schema; that is a schema/parser change, not a reason to issue a second sequential request. The current adapter returns only `ChoiceAnswer` values, so this combined response would require a later adapter/model-contract change and is deliberately outside this research-only edit.
+The current Jev path sends value, action-tree and spatial questions in one request. Alternative providers should be compared against that one-request path. `OpenAIProvider` currently returns Choice answers only; adding an optional `win_probability` forecast to that adapter would require extending its response schema and parser.
 
 ## Source and availability notes
 

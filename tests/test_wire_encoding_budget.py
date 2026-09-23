@@ -226,91 +226,72 @@ def test_token_estimate_mixed_identifiers_and_unicode():
     assert est_kr >= 15, f"Unicode text was undercounted: {est_kr}"
 
 
-def test_http_budget_splits_large_tree_and_selects_last_leaf_without_dumping_tree(tmp_path):
-    """Large HTTP traversal stays sequential, bounded, and lossless."""
-    payloads = []
+def test_http_large_tree_selects_last_leaf_in_one_bounded_request(tmp_path):
+    """Every leaf remains addressable while all tree levels share one HTTP call."""
     raw_bodies = []
 
     def respond(request: httpx.Request) -> httpx.Response:
         raw_bodies.append(bytes(request.content))
         payload = json.loads(request.content)
-        payloads.append(payload)
-        questions = payload["questions"]
-        assert len(questions) == 1
-        question_id, question = next(iter(questions.items()))
-        choice = next(reversed(question["criteria"]))
-        answer = {
-            question_id: {
-                "type": "choice",
-                "choice": choice,
-                "confidence": 1,
-                "probabilities": {
-                    key: float(key == choice) for key in question["criteria"]
-                },
+        answers = {}
+        for question_id, question in payload["questions"].items():
+            choice = next(reversed(question["criteria"]))
+            answers[question_id] = {
+                "type": "choice", "choice": choice, "confidence": 1,
+                "probabilities": {key: float(key == choice) for key in question["criteria"]},
             }
-        }
-        return httpx.Response(200, json={"model": "jev-latest", "answers": answer})
+        return httpx.Response(200, json={"model": "jev-latest", "answers": answers})
 
     provider = JevProvider("test-key", transport=httpx.MockTransport(respond))
-    loop = AgentLoop(provider, tmp_path, single_stage=True, byte_budget=5000, token_budget=24000)
+    loop = AgentLoop(provider, tmp_path, single_stage=True)
 
     def generate(obs, due, exhaustive=False):
         assert exhaustive is True
         return [
-            *[
-                Action(
-                    id=f"attack_{index}",
-                    category="attack",
-                    group=f"group_{index}",
-                    label=f"Attack target {index}",
-                    commands=(Command(kind="attack", unit_ids=(1,), target_id=index),),
-                )
-                for index in range(1200)
-            ],
+            Action(
+                id=f"attack_{index}", category="attack", group=f"group_{index}",
+                label=f"Attack target {index}",
+                commands=(Command(kind="attack", unit_ids=(1,), target_id=index),),
+            )
+            for index in range(1200)
         ]
 
     loop.generator.generate = generate
-    observation = SyntheticGame("large_http_budget").observe()
-    decision = asyncio.run(loop.step(observation))
-
+    decision = asyncio.run(loop.step(SyntheticGame("large_http_budget").observe()))
     assert decision.action_id == "attack_1199"
-    assert payloads
-    assert all(len(payload["questions"]) == 1 for payload in payloads)
-    assert all(
-        len(next(iter(payload["questions"].values()))["criteria"]) <= 200
-        for payload in payloads
-    )
-    assert all("choice_tree" not in payload["state"] for payload in payloads)
-    assert max(len(body) for body in raw_bodies) <= 5000
-    assert max(estimate_tokens_conservative(body.decode()) for body in raw_bodies) <= 24000
-    assert max(len(payload["state"]["candidate_actions"]["rows"]) for payload in payloads) < 1201
-    record = json.loads(
-        (tmp_path / "large_http_budget" / "decisions.jsonl").read_text().splitlines()[0]
-    )
-    sent_calls = [call for call in record["calls"] if call["sent"]]
-    assert record["query_count"] == len(payloads)
-    assert [call["request_bytes"] for call in sent_calls] == [len(body) for body in raw_bodies]
+    assert len(raw_bodies) == 1
+    payload = json.loads(raw_bodies[0])
+    assert len(payload["questions"]) > 1
+    assert all(len(question["criteria"]) <= 200 for question in payload["questions"].values())
+    assert "choice_tree" not in payload["state"]
+    assert len(payload["state"]["candidate_actions"]["rows"]) == 0
+    assert len(raw_bodies[0]) <= loop.byte_budget
+    assert estimate_tokens_conservative(raw_bodies[0].decode()) <= loop.token_budget
+    record = json.loads((tmp_path / "large_http_budget" / "decisions.jsonl").read_text().splitlines()[0])
+    assert record["query_count"] == 1
+    assert record["calls"][0]["request_bytes"] == len(raw_bodies[0])
 
 
-def test_dynamic_budget_split_preserves_all_leaf_ids():
-    actions = [
+def test_one_request_budget_guard_preserves_all_local_actions(tmp_path):
+    payloads = []
+
+    def respond(request):
+        payloads.append(request.content)
+        raise AssertionError("Oversized request must be stopped before HTTP")
+
+    provider = JevProvider("test-key", transport=httpx.MockTransport(respond))
+    loop = AgentLoop(provider, tmp_path, single_stage=True, byte_budget=5_000)
+    loop.generator.generate = lambda obs, due, exhaustive=False: [
         Action(
-            id=f"attack_{index}",
-            category="attack",
-            group=f"group_{index}",
-            label=f"Attack target {index}",
-            commands=(Command(kind="attack", unit_ids=(index,), target_id=index),),
-        )
-        for index in range(400)
+            id=f"attack_{i}", category="attack", group="army", label=f"Attack {i}",
+            commands=(Command(kind="attack", unit_ids=(1,), target_id=i),),
+        ) for i in range(1200)
     ]
-    tree = ChoiceTree(
-        {"observation": {"units": [{"id": index, "type": "Terran_Marine"} for index in range(400)]}},
-        actions,
-        hierarchical=True,
-    )
-    root = "command_kind"
-    node = next(node for node, options in tree.nodes.items() if len(options) > 2)
-    before = set(tree.descendants(root))
-    AgentLoop.__new__(AgentLoop)._split_budget_node(tree, node)
-    after = set(tree.descendants(root))
-    assert after == before == {action.id for action in actions}
+    decision = asyncio.run(loop.step(SyntheticGame("large_budget_guard").observe()))
+    assert decision.action_id == "wait"
+    assert decision.fallback_reason == "context_budget_exceeded"
+    assert payloads == []
+    record = json.loads((tmp_path / "large_budget_guard" / "decisions.jsonl").read_text().splitlines()[0])
+    assert len(record["actions"]) == 1200
+    assert record["query_count"] == 0
+    assert "wire_bytes=" in record["diagnostic"]

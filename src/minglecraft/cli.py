@@ -75,8 +75,14 @@ def main():
         command.add_argument(
             "--token-budget",
             type=int,
+            default=48_000,
+            help="Estimated token budget for the entire request (not an exact tokenizer count)",
+        )
+        command.add_argument(
+            "--question-token-budget",
+            type=int,
             default=24_000,
-            help="Conservative estimated token budget per request (positive integer, not an exact tokenizer count)",
+            help="Estimated budget for state plus the longest single question",
         )
         command.add_argument(
             "--spatial-precision-px",
@@ -134,6 +140,7 @@ def main():
             request_size_limit=args.request_size_limit,
             byte_budget=args.byte_budget,
             token_budget=args.token_budget,
+            question_token_budget=args.question_token_budget,
             spatial_precision_px=args.spatial_precision_px,
         )
 

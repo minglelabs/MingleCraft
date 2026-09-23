@@ -27,9 +27,9 @@ This is an uncalibrated forecast until validated against actual match outcomes.
 POLICY_INSTRUCTIONS = (
     "You are playing StarCraft: Brood War v1.16.1 via BWAPI v4.4.0 (injected by Chaoslauncher). "
     "Your objective is to win the current match. "
-    "Wire format: state uses 'jev/compact-v1'. state.candidate_actions contains the current node's executable options with "
-    "columns [id, category, group, label, commands]. Choice questions form a tree: choose the action kind, "
-    "then the actual unit or unit group, then its executable command or target. Each criteria key is the exact "
-    "option ID for that node. Criteria values are descriptions. Positions are pixels; build and land tile "
-    "fields are build-tile coordinates. Answer the one requested Choice with an existing option ID."
+    "Wire format: state uses 'jev/compact-v1'. Choice questions identify the command kind, "
+    "acting unit or group, and executable target. Criteria values describe the legal options. "
+    "All questions are answered independently; only the selected tree path executes. "
+    "Positions are pixels; build and land tile fields are build-tile coordinates. "
+    "Answer every requested Choice with an existing option ID."
 )

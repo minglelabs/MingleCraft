@@ -53,7 +53,7 @@ All BWAPI calls occur on the game thread. Only serialized JSON enters the backgr
 
 Shutting down the Python service cleanly while a match is active produces an incomplete summary with unknown outcome. A crashed/disconnected game can leave a trace without a summary; do not count it as a loss. Restart the service for an abandoned active match.
 
-For staged Jev, an eligible decision consists of two sequential provider requests: one Noul `win_probability` request and one Choice policy request. The policy request receives the fresh value estimate. A spatial ground action then adds one sequential Choice request per coordinate level. Single-stage skips the value request but uses the same policy and coordinate route. A shared per-step deadline covers all requests; partial value success is retained in the trace if policy fails. The same Jev model performs all roles.
+For Jev, an eligible decision sends one provider request containing every command-tree Choice question, every coordinate-digit Choice question, and a Noul `win_probability` question unless `--single-stage` is set. All questions are independent and cannot see one another's answers. Code uses only the selected tree path and its spatial digits. A failed request yields `wait`; a fresh value estimate cannot survive a failure of that same request.
 
 Provider requests have no in-call retries. Timeout, invalid options/probabilities, rate limits, cumulative request-size guard failures and other provider failures select wait and start a two-second wall-clock cooldown. Every fallback is logged. A request-size guard must reject before sending an oversized cumulative history; live HTTP errors return 400/409/413/415/500 and never issue a command.
 
@@ -61,9 +61,9 @@ Changing the shared provider deadline does not change bridge transport timeouts.
 
 
 ### Spatial Ground Coordinate Selection and Limitations
-- Ground `move` and attack-move actions resolve uniformly over the complete map: 8x8 regions, then sequential 8x8 refinements until the selected rectangle is at most the configured precision (CLI: `--spatial-precision-px`, default 8px). The command uses the selected rectangle center.
-- Region and each refinement are separate Jev Choice requests. They share the step deadline and request-size guard; a timeout, invalid ID, malformed dimensions, or exhausted deadline yields `wait` and never executes a placeholder.
-- The default 200ms deadline may be too short for all sequential questions; configure a larger deadline for this path. This is a total-deadline contract, not a latency benchmark.
+- Ground `move`, attack-move and other coordinate actions use independent 4x4 base-4 x/y digit questions in the same request. Depth is determined by `--spatial-precision-px` (default 8px); code composes the returned digits into a global-map pixel coordinate and converts to build tiles for build/land commands.
+- Each digit question asks for the corresponding digit of the same absolute intended destination, without seeing any other digit answer. The model may choose inconsistent digits; code cannot guarantee semantic coherence. A timeout, invalid selected-path ID, or missing map dimensions yields `wait` rather than executing a placeholder.
+- All questions share one provider deadline. The complete request and state-plus-longest-question budgets are checked before HTTP; there is no serial fallback or silent loss of candidates.
 - Building placement still uses BWAPI `getBuildLocation(type, homeTile, 24)`, so construction candidates remain limited to that native-radius query. Exhaustive Jev candidates do not include baseline aggregate or parity squads.
 
 Example for initial live testing (not a measured latency guarantee):
@@ -72,4 +72,4 @@ Example for initial live testing (not a measured latency guarantee):
 minglecraft serve --provider jev --single-stage --map "(2)Destination.scx" --spatial-precision-px 8 --deadline-ms 10000 --ttl-frames 480
 ```
 
-Rebuild and replace the Windows bridge DLL to provide actual map dimensions, then restart the Python service. Inspect receipts for stale decisions and adjust the budgets to the actual game speed and measured latency. A large TTL accepts older state; it does not make inference faster. Use `--spatial-precision-px 1` to refine down to individual pixels, at the cost of additional calls. Map coverage means every pixel belongs to a selectable cell, not that every pixel is selectable at the default precision. Terrain/pathing data is not added by this change.
+Restart the Python service after updating this version; the BWAPI DLL does not need rebuilding for the decision-request change. Inspect receipts for stale decisions and adjust budgets to measured latency. A large TTL accepts older state; it does not make inference faster. Use `--spatial-precision-px 1` for finer coordinates at the cost of more questions in the same request. Terrain/pathing data is not added by this change.

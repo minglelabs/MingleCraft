@@ -282,6 +282,7 @@ class ActionGenerator:
             if u.completed
             and ("Refinery" in u.type or "Assimilator" in u.type or "Extractor" in u.type)
         }
+        gather_targets = {**minerals, **refineries}
 
         if "economy" in due:
             for worker in workers:
@@ -762,6 +763,30 @@ class ActionGenerator:
             group_can_attack = all(unit.can_attack for unit in group_units)
             group_can_move = all(unit.can_move for unit in group_units)
             group_label = group_name.replace("_", " ")
+            if "economy" in due and group_name in {"all_workers", "all_scvs"}:
+                common_gather_targets = set(group_units[0].can_gather)
+                for unit in group_units[1:]:
+                    common_gather_targets.intersection_update(unit.can_gather)
+                for target_id in sorted(common_gather_targets):
+                    if target_id not in gather_targets:
+                        continue
+                    target = gather_targets[target_id]
+                    target_label = (
+                        f"visible mineral patch {target_id}"
+                        if target_id in minerals
+                        else f"{target.type} {target_id}"
+                    )
+                    add(
+                        Action(
+                            id=f"gather_group_{group_name}_{target_id}",
+                            category="economy",
+                            group=group_name,
+                            label=f"Send {group_label} ({len(u_ids)} units) to {target_label}",
+                            commands=(
+                                Command(kind="gather", unit_ids=u_ids, target_id=target_id),
+                            ),
+                        )
+                    )
             if "attack" in due or "defense" in due:
                 if group_can_attack:
                     add(

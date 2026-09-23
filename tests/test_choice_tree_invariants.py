@@ -1,7 +1,31 @@
 import random
 
 from minglecraft.actions.hierarchy import MAX_CHOICES_PER_QUESTION, ChoiceTree
-from minglecraft.models import Action, Command, Position
+from minglecraft.models import Action, ChoiceAnswer, Command, Position, ProviderResult
+
+
+def test_parallel_answers_ignore_unselected_branch_errors():
+    actions = [
+        _make_action("gather_1_100", "gather", (1,), target_id=100),
+        _make_action("gather_1_101", "gather", (1,), target_id=101),
+        _make_action("gather_2_100", "gather", (2,), target_id=100),
+        _make_action("attack_3_500", "attack", (3,), target_id=500),
+        _make_action("attack_3_501", "attack", (3,), target_id=501),
+    ]
+    tree = ChoiceTree({}, actions, hierarchical=True)
+    answers = {
+        node: ChoiceAnswer(choice="invalid_unused_branch", probabilities={"wrong": 1.0})
+        for node in tree.request.questions
+    }
+    answers["command_kind"] = ChoiceAnswer(choice="gather")
+    actor_node = next(node for node in tree.request.questions if node.startswith("actors_") and "gather" in node)
+    answers[actor_node] = ChoiceAnswer(choice="unit_1")
+    command_node = next(node for node in tree.request.questions if node.startswith("commands_") and "unit_1" in node)
+    answers[command_node] = ChoiceAnswer(choice="gather_1_101")
+
+    selected, path = tree.resolve(ProviderResult(model="test", answers=answers))
+    assert selected.id == "gather_1_101"
+    assert {step["node"] for step in path} == {"command_kind", actor_node, command_node}
 
 
 def _make_action(

@@ -1,11 +1,19 @@
-"""Uniform, map-wide hierarchical coordinate selection for Jev."""
+"""Uniform, map-wide radix coordinate selection for Jev.
 
+Every digit is an independent global-map question.  A digit does not refine a
+parent answer in the prompt; the local resolver combines all returned radix
+digits into one absolute destination.
+"""
+
+import math
 from dataclasses import dataclass
 
 from minglecraft.models import ChoiceQuestion, Observation
 
 DEFAULT_GRID_SIZE = 8
 DEFAULT_PRECISION_PX = 8
+RADIX = 4
+RADIX_OPTIONS = RADIX * RADIX
 
 
 @dataclass(frozen=True)
@@ -37,6 +45,63 @@ def get_spatial_grid_spec(
         region_divisions=DEFAULT_GRID_SIZE,
         cell_divisions=DEFAULT_GRID_SIZE,
         precision_px=precision_px,
+    )
+
+
+def spatial_digit_depth(spec: SpatialGridSpec) -> int:
+    """Return the radix depth needed to reach the configured pixel target."""
+    cells = max(spec.map_width, spec.map_height) / spec.precision_px
+    return max(1, math.ceil(math.log(max(1, cells), RADIX)))
+
+
+def build_digit_question(
+    actor_label: str,
+    action_kind: str,
+    spec: SpatialGridSpec,
+    digit: int,
+    depth: int,
+) -> ChoiceQuestion:
+    """Build one independent 4x4 global-map radix digit question."""
+    criteria = {
+        f"digit_{dx}_{dy}": f"x digit {dx}, y digit {dy}"
+        for dy in range(RADIX)
+        for dx in range(RADIX)
+    }
+    return ChoiceQuestion(
+        instructions=(
+            f"Assume action {actor_label} ({action_kind}) in state.spatial_actors is selected. "
+            f"Choose digit {digit}/{depth} (i={digit}, 1-based, most significant first) "
+            "of its absolute pixel destination. Follow state.coordinate_rule; "
+            "derive the same destination independently for every digit."
+        ),
+        criteria=criteria,
+    )
+
+
+def parse_digit_key(key: str) -> tuple[int, int]:
+    parts = key.split("_")
+    if len(parts) != 3 or parts[0] != "digit":
+        raise ValueError(f"Invalid spatial digit choice key: {key}")
+    x, y = int(parts[1]), int(parts[2])
+    if not 0 <= x < RADIX or not 0 <= y < RADIX:
+        raise ValueError(f"Invalid spatial digit choice key: {key}")
+    return x, y
+
+
+def synthesize_radix_coordinate(
+    spec: SpatialGridSpec, digits: list[tuple[int, int]]
+) -> tuple[int, int]:
+    """Compose independent radix digits into a clamped absolute pixel point."""
+    if not digits:
+        raise ValueError("At least one spatial digit is required")
+    x = y = 0
+    for dx, dy in digits:
+        x = x * RADIX + dx
+        y = y * RADIX + dy
+    scale = RADIX ** len(digits)
+    return (
+        min(spec.map_width - 1, x * spec.map_width // scale),
+        min(spec.map_height - 1, y * spec.map_height // scale),
     )
 
 

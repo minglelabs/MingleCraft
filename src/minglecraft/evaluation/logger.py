@@ -27,11 +27,16 @@ class MatchLogger:
             result = event.get("provider_result") or {}
             calls = [{"latency_ms": event.get("latency_ms", 0), "usage": result.get("usage", {})}]
         for call in calls or []:
+            if not call.get("sent", True):
+                continue
             self.calls += 1
             if call.get("stage") == "value":
                 self.value_calls += 1
             elif call.get("stage") == "policy":
                 self.policy_calls += 1
+            elif call.get("stage") == "combined":
+                self.policy_calls += 1
+                self.value_calls += int(bool(call.get("includes_value")))
             self.latencies.append(call.get("latency_ms", 0))
             usage = call.get("usage", {})
             self.input_tokens += usage.get("input_tokens", 0)
